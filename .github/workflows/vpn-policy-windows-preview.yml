@@ -49,13 +49,13 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
-      - name: Build Windows debug bundle
-        run: flutter build windows --debug
+      - name: Build Windows release bundle
+        run: flutter build windows --release
 
       - name: Package preview
         shell: pwsh
         run: |
-          $src = "build/windows/x64/runner/Debug"
+          $src = "build/windows/x64/runner/Release"
           if (!(Test-Path $src)) {
             throw "Windows build output not found: $src"
           }
