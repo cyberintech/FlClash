@@ -3,35 +3,28 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('parses policy payload and rewrites abstract VPN target', () {
-    final payload = VpnPolicyPayload.fromJson(
-      {
-        'version': 1,
-        'revision': '2026-10-05T00:00:00Z',
-        'device': {
-          'id': 2,
-          'name': 'laptop-main',
-          'platform': 'windows',
-        },
-        'policy': {
-          'id': 1,
-          'name': 'Selected',
-          'mode': 'only_selected',
-          'apps': ['telegram'],
-          'services': ['youtube'],
-          'custom_domains': ['example.com'],
-        },
-        'compiled': {
-          'target': 'mihomo',
-          'rules': [
-            'PROCESS-NAME,Telegram.exe,VPN',
-            'RULE-SET,youtube,VPN',
-            'DOMAIN-SUFFIX,example.com,VPN',
-            'MATCH,DIRECT',
-          ],
-        },
+    final payload = VpnPolicyPayload.fromJson({
+      'version': 1,
+      'revision': '2026-10-05T00:00:00Z',
+      'device': {'id': 2, 'name': 'laptop-main', 'platform': 'windows'},
+      'policy': {
+        'id': 1,
+        'name': 'Selected',
+        'mode': 'only_selected',
+        'apps': ['telegram'],
+        'services': ['youtube'],
+        'custom_domains': ['example.com'],
       },
-      vpnTarget: 'Proxy',
-    );
+      'compiled': {
+        'target': 'mihomo',
+        'rules': [
+          'PROCESS-NAME,Telegram.exe,VPN',
+          'RULE-SET,youtube,VPN',
+          'DOMAIN-SUFFIX,example.com,VPN',
+          'MATCH,DIRECT',
+        ],
+      },
+    }, vpnTarget: 'Proxy');
 
     expect(payload.version, 1);
     expect(payload.deviceName, 'laptop-main');
