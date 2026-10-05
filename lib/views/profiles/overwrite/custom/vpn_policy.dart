@@ -190,7 +190,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _status = compactError(error);
+          _status = 'Sync failed: ${compactError(error)}';
         });
       }
     } finally {
@@ -278,7 +278,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
 
     setState(() {
       _busy = true;
-      _status = null;
+      _status = 'Syncing...';
     });
     try {
       await vpnPolicySettingsStore.save(widget.profileId, settings);
@@ -340,9 +340,12 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _customDomains
         ..clear()
         ..addAll(payload.customDomains);
-      _status = payload.policyName.isEmpty
-          ? null
-          : '${payload.policyName} · ${payload.rules.length} rules';
+      final policyLabel = payload.policyName.isEmpty
+          ? 'Policy'
+          : payload.policyName;
+      _status =
+          'Synced: $policyLabel · ${payload.rules.length} rules'
+          '${payload.revision.isEmpty ? '' : ' · ${payload.revision}'}';
     });
   }
 
@@ -487,8 +490,27 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               onPressed: _busy
                   ? null
                   : () => _refreshFromServer(targets: targets),
-              child: Text(appLocalizations.sync),
+              child: _busy
+                  ? const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 10),
+                        Text('Syncing...'),
+                      ],
+                    )
+                  : Text(appLocalizations.sync),
             ),
+            if (_status?.isNotEmpty == true) ...[
+              const SizedBox(height: 10),
+              SelectableText(
+                _status!,
+                style: context.textTheme.bodySmall,
+              ),
+            ],
           ],
         ),
       ),
@@ -738,10 +760,6 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                       )
                     : Text(context.appLocalizations.save),
               ),
-              if (_status?.isNotEmpty == true) ...[
-                const SizedBox(height: 12),
-                SelectableText(_status!),
-              ],
               if (_payload != null && _payload!.revision.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(_payload!.revision, style: context.textTheme.bodySmall),
