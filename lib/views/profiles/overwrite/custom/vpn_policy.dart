@@ -751,7 +751,15 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
 
     return BaseScaffold(
       title: 'VPN Policy',
-      body: body,
+      body: Localizations.override(
+        context: context,
+        locale: const Locale('en'),
+        delegates: const [
+          DefaultMaterialLocalizations.delegate,
+          DefaultWidgetsLocalizations.delegate,
+        ],
+        child: body,
+      ),
     );
   }
 }
