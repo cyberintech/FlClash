@@ -416,31 +416,36 @@ void main() {
     },
   );
 
-  test('setProfileCustomRules atomically replaces the profile rule set', () async {
-    const profile = Profile(id: 1, autoUpdateDuration: Duration.zero);
-    const first = Rule(
-      id: 21,
-      ruleAction: RuleAction.DOMAIN,
-      content: 'first.example',
-      ruleTarget: 'DIRECT',
-    );
-    const second = Rule(
-      id: 22,
-      ruleAction: RuleAction.DOMAIN,
-      content: 'second.example',
-      ruleTarget: 'Proxy',
-    );
+  test(
+    'setProfileCustomRules atomically replaces the profile rule set',
+    () async {
+      const profile = Profile(id: 1, autoUpdateDuration: Duration.zero);
+      const first = Rule(
+        id: 21,
+        ruleAction: RuleAction.DOMAIN,
+        content: 'first.example',
+        ruleTarget: 'DIRECT',
+      );
+      const second = Rule(
+        id: 22,
+        ruleAction: RuleAction.DOMAIN,
+        content: 'second.example',
+        ruleTarget: 'Proxy',
+      );
 
-    await database.profiles.put(profile.toCompanion());
-    await database.rulesDao.putProfileCustomRule(profile.id, first);
+      await database.profiles.put(profile.toCompanion());
+      await database.rulesDao.putProfileCustomRule(profile.id, first);
 
-    await database.rulesDao.setProfileCustomRules(profile.id, [second]);
+      await database.rulesDao.setProfileCustomRules(profile.id, [second]);
 
-    final rules = await database.rulesDao.queryProfileCustomRules(profile.id).get();
-    expect(rules, hasLength(1));
-    expect(rules.single.id, second.id);
-    expect(rules.single.content, second.content);
-  });
+      final rules = await database.rulesDao
+          .queryProfileCustomRules(profile.id)
+          .get();
+      expect(rules, hasLength(1));
+      expect(rules.single.id, second.id);
+      expect(rules.single.content, second.content);
+    },
+  );
 
   test('delRules deletes more rules than one statement can bind', () async {
     const profile = Profile(id: 1, autoUpdateDuration: Duration.zero);
