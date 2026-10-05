@@ -385,57 +385,65 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     final appLocalizations = context.appLocalizations;
     final selectedTarget = _effectiveTarget(targets);
     return [
-      ExpansionTile(
-        title: const Text('Policy Service'),
-        subtitle: Text(
-          _settings.lastPolicyName.isEmpty ? '—' : _settings.lastPolicyName,
-        ),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        children: [
-          TextFormField(
-            controller: _urlController,
-            keyboardType: TextInputType.url,
-            decoration: InputDecoration(
-              labelText: appLocalizations.url,
-              hintText: 'https://policy.example.com',
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _keyController,
-            obscureText: true,
-            decoration: InputDecoration(labelText: appLocalizations.key),
-          ),
-          const SizedBox(height: 12),
-          InputDecorator(
-            decoration: InputDecoration(labelText: appLocalizations.ruleTarget),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                isExpanded: true,
-                value: selectedTarget,
-                hint: Text(appLocalizations.selectSplitStrategy),
-                items: [
-                  for (final target in targets)
-                    DropdownMenuItem(value: target, child: Text(target)),
-                ],
-                onChanged: targets.isEmpty
-                    ? null
-                    : (value) {
-                        setState(() {
-                          _selectedTarget = value;
-                        });
-                      },
+      _Section(
+        title: 'Policy Service',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_settings.lastPolicyName.isNotEmpty) ...[
+              Text(
+                _settings.lastPolicyName,
+                style: context.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+            ],
+            TextFormField(
+              controller: _urlController,
+              keyboardType: TextInputType.url,
+              decoration: InputDecoration(
+                labelText: appLocalizations.url,
+                hintText: 'https://policy.example.com',
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          FilledButton.tonal(
-            onPressed: _busy
-                ? null
-                : () => _refreshFromServer(targets: targets),
-            child: Text(appLocalizations.sync),
-          ),
-        ],
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _keyController,
+              obscureText: true,
+              decoration: InputDecoration(labelText: appLocalizations.key),
+            ),
+            const SizedBox(height: 12),
+            InputDecorator(
+              decoration: InputDecoration(
+                labelText: appLocalizations.ruleTarget,
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: selectedTarget,
+                  hint: Text(appLocalizations.selectSplitStrategy),
+                  items: [
+                    for (final target in targets)
+                      DropdownMenuItem(value: target, child: Text(target)),
+                  ],
+                  onChanged: targets.isEmpty
+                      ? null
+                      : (value) {
+                          setState(() {
+                            _selectedTarget = value;
+                          });
+                        },
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonal(
+              onPressed: _busy
+                  ? null
+                  : () => _refreshFromServer(targets: targets),
+              child: Text(appLocalizations.sync),
+            ),
+          ],
+        ),
       ),
     ];
   }
