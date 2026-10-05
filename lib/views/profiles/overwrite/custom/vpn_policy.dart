@@ -60,17 +60,20 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   Widget _buildDiagnosticError(FlutterErrorDetails details) {
     final stack = details.stack?.toString() ?? '';
     return ColoredBox(
-      color: const Color(0xFF2D2528),
+      color: const Color(0xFF101826),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-        child: SelectableText(
-          'VPN Policy runtime error\n\n'
-          '${details.exceptionAsString()}\n\n'
-          '$stack',
-          style: const TextStyle(
-            color: Color(0xFFFFD6D9),
-            fontSize: 13,
-            height: 1.35,
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text(
+            'VPN Policy runtime error\n\n'
+            '${details.exceptionAsString()}\n\n'
+            '$stack',
+            style: const TextStyle(
+              color: Color(0xFFF8FAFC),
+              fontSize: 13,
+              height: 1.4,
+            ),
           ),
         ),
       ),
@@ -416,24 +419,24 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               decoration: InputDecoration(
                 labelText: appLocalizations.ruleTarget,
               ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  isExpanded: true,
-                  value: selectedTarget,
-                  hint: Text(appLocalizations.selectSplitStrategy),
-                  items: [
-                    for (final target in targets)
-                      DropdownMenuItem(value: target, child: Text(target)),
-                  ],
-                  onChanged: targets.isEmpty
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _selectedTarget = value;
-                          });
-                        },
-                ),
-              ),
+              child: targets.isEmpty
+                  ? Text(appLocalizations.selectSplitStrategy)
+                  : Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final target in targets)
+                          ChoiceChip(
+                            label: Text(target),
+                            selected: selectedTarget == target,
+                            onSelected: (_) {
+                              setState(() {
+                                _selectedTarget = target;
+                              });
+                            },
+                          ),
+                      ],
+                    ),
             ),
             const SizedBox(height: 12),
             FilledButton.tonal(
@@ -704,15 +707,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
 
     return BaseScaffold(
       title: 'VPN Policy',
-      body: Localizations.override(
-        context: context,
-        locale: const Locale('en'),
-        delegates: const [
-          DefaultMaterialLocalizations.delegate,
-          DefaultWidgetsLocalizations.delegate,
-        ],
-        child: body,
-      ),
+      body: body,
     );
   }
 }
@@ -726,22 +721,45 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card.filled(
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = dark
+        ? const Color(0xFF1B2432)
+        : const Color(0xFFF3F6FA);
+    final borderColor = dark
+        ? const Color(0xFF66758B)
+        : const Color(0xFFA7B3C4);
+    final titleColor = dark
+        ? const Color(0xFFF8FAFC)
+        : const Color(0xFF172033);
+
+    return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: borderColor, width: 1.2),
+      ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
                 Expanded(
-                  child: Text(title, style: context.textTheme.titleMedium),
+                  child: Text(
+                    title,
+                    style: context.textTheme.titleMedium?.copyWith(
+                      color: titleColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
                 ?trailing,
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             child,
           ],
         ),
