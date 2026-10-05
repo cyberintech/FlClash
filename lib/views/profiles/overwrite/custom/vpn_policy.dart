@@ -11,6 +11,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class VpnPolicyView extends ConsumerStatefulWidget {
@@ -59,21 +60,64 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
 
   Widget _buildDiagnosticError(FlutterErrorDetails details) {
     final stack = details.stack?.toString() ?? '';
+    final message =
+        'VPN Policy runtime error\n\n'
+        '${details.exceptionAsString()}\n\n'
+        '$stack';
+
     return ColoredBox(
       color: const Color(0xFF101826),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: Text(
-            'VPN Policy runtime error\n\n'
-            '${details.exceptionAsString()}\n\n'
-            '$stack',
-            style: const TextStyle(
-              color: Color(0xFFF8FAFC),
-              fontSize: 13,
-              height: 1.4,
-            ),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: message));
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF26364D),
+                    border: Border.all(
+                      color: const Color(0xFF8AA4C8),
+                      width: 1.2,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'COPY ERROR',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFFFFFFFF),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Text(
+                    message,
+                    style: const TextStyle(
+                      color: Color(0xFFF8FAFC),
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
