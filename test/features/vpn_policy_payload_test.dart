@@ -1,4 +1,5 @@
 import 'package:fl_clash/features/vpn_policy/policy_payload.dart';
+import 'package:fl_clash/models/clash_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
