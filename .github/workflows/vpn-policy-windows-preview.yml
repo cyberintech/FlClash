@@ -1,0 +1,73 @@
+name: VPN Policy Windows Preview
+
+on:
+  push:
+    branches:
+      - vpn-policy-windows-preview
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: '3.47.4'
+  GO_VERSION: '1.26.4'
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Enable git long paths
+        run: git config --global core.longpaths true
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            services/helper
+            plugins/rust_api/rust
+          cache-directories: .dart_tool/hooks_runner
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Build Windows debug bundle
+        run: flutter build windows --debug
+
+      - name: Package preview
+        shell: pwsh
+        run: |
+          $src = "build/windows/x64/runner/Debug"
+          if (!(Test-Path $src)) {
+            throw "Windows build output not found: $src"
+          }
+          $zip = "FlClash-VPN-Policy-Windows-preview.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path "$src/*" -DestinationPath $zip -Force
+          Get-Item $zip | Format-List Name,Length,LastWriteTime
+
+      - name: Upload preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlClash-VPN-Policy-Windows-preview
+          path: FlClash-VPN-Policy-Windows-preview.zip
+          if-no-files-found: error
+          retention-days: 7
