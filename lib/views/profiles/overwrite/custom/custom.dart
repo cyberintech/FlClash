@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'custom_proxies.dart';
 import 'groups.dart';
 import 'rules.dart';
+import 'vpn_policy.dart';
 
 class CustomContent extends ConsumerWidget {
   const CustomContent({super.key});
@@ -66,6 +67,10 @@ class CustomContent extends ConsumerWidget {
     BaseNavigator.push(context, CustomRulesView(profileId));
   }
 
+  void _handleToVpnPolicyView(BuildContext context, int profileId) {
+    BaseNavigator.push(context, VpnPolicyView(profileId));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appLocalizations = context.appLocalizations;
@@ -92,9 +97,8 @@ class CustomContent extends ConsumerWidget {
         issueCounts.proxies + issueCounts.proxyGroups + issueCounts.rules;
     final generalIssues = ref
         .watch(
-          customOverwriteIssuesProvider(
-            profileId,
-          ).select((state) => SelectValue(state.general)),
+          customOverwriteIssuesProvider(profileId)
+              .select((state) => SelectValue(state.general)),
         )
         .value;
     final issueMessages = [
@@ -169,6 +173,15 @@ class CustomContent extends ConsumerWidget {
               count: ruleNum,
               issueCount: issueCounts.rules,
             ),
+          ),
+        ),
+        const SliverToBoxAdapter(child: SizedBox(height: 4)),
+        SliverToBoxAdapter(
+          child: MoreActionButton(
+            label: 'VPN Policy',
+            onPressed: () {
+              _handleToVpnPolicyView(context, profileId);
+            },
           ),
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 32)),
