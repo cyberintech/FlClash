@@ -52,22 +52,10 @@ jobs:
       - name: Build Windows release bundle
         run: flutter build windows --release
 
-      - name: Package preview
-        shell: pwsh
-        run: |
-          $src = "build/windows/x64/runner/Release"
-          if (!(Test-Path $src)) {
-            throw "Windows build output not found: $src"
-          }
-          $zip = "FlClash-VPN-Policy-Windows-preview.zip"
-          if (Test-Path $zip) { Remove-Item $zip -Force }
-          Compress-Archive -Path "$src/*" -DestinationPath $zip -Force
-          Get-Item $zip | Format-List Name,Length,LastWriteTime
-
       - name: Upload preview
         uses: actions/upload-artifact@v4
         with:
           name: FlClash-VPN-Policy-Windows-preview
-          path: FlClash-VPN-Policy-Windows-preview.zip
+          path: build/windows/x64/runner/Release/
           if-no-files-found: error
           retention-days: 7
