@@ -667,42 +667,52 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             .toList()
           ..sort();
 
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : ListView(
+            padding: const EdgeInsets.all(
+              16,
+            ).copyWith(top: context.contentTopPadding),
+            children: [
+              ..._connectionSection(context, targets),
+              _modeSection(),
+              _appsSection(),
+              _servicesSection(),
+              _domainsSection(),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _busy || _catalog == null
+                    ? null
+                    : () => _saveAndApply(targets),
+                child: _busy
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(context.appLocalizations.save),
+              ),
+              if (_status?.isNotEmpty == true) ...[
+                const SizedBox(height: 12),
+                SelectableText(_status!),
+              ],
+              if (_payload != null && _payload!.revision.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(_payload!.revision, style: context.textTheme.bodySmall),
+              ],
+            ],
+          );
+
     return BaseScaffold(
       title: 'VPN Policy',
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(
-                16,
-              ).copyWith(top: context.contentTopPadding),
-              children: [
-                ..._connectionSection(context, targets),
-                _modeSection(),
-                _appsSection(),
-                _servicesSection(),
-                _domainsSection(),
-                const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: _busy || _catalog == null
-                      ? null
-                      : () => _saveAndApply(targets),
-                  child: _busy
-                      ? const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(context.appLocalizations.save),
-                ),
-                if (_status?.isNotEmpty == true) ...[
-                  const SizedBox(height: 12),
-                  SelectableText(_status!),
-                ],
-                if (_payload != null && _payload!.revision.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(_payload!.revision, style: context.textTheme.bodySmall),
-                ],
-              ],
-            ),
+      body: Localizations.override(
+        context: context,
+        locale: const Locale('en'),
+        delegates: const [
+          DefaultMaterialLocalizations.delegate,
+          DefaultWidgetsLocalizations.delegate,
+        ],
+        child: body,
+      ),
     );
   }
 }
