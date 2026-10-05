@@ -434,6 +434,27 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   List<Widget> _connectionSection(BuildContext context, List<String> targets) {
     final appLocalizations = context.appLocalizations;
     final selectedTarget = _effectiveTarget(targets);
+    final status = _status;
+    final isError = status?.startsWith('Sync failed:') == true;
+    final isSuccess = status?.startsWith('Synced:') == true;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final statusBackground = isError
+        ? (dark ? const Color(0xFF4A1D24) : const Color(0xFFFFECEE))
+        : isSuccess
+        ? (dark ? const Color(0xFF153B2A) : const Color(0xFFE9F8EF))
+        : (dark ? const Color(0xFF26364D) : const Color(0xFFEAF2FC));
+    final statusBorder = isError
+        ? const Color(0xFFF87171)
+        : isSuccess
+        ? const Color(0xFF4ADE80)
+        : const Color(0xFF60A5FA);
+    final statusTextColor = dark
+        ? const Color(0xFFFFFFFF)
+        : isError
+        ? const Color(0xFF7F1D1D)
+        : isSuccess
+        ? const Color(0xFF14532D)
+        : const Color(0xFF1E3A5F);
     return [
       _Section(
         title: 'Policy Service',
@@ -504,11 +525,43 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                     )
                   : Text(appLocalizations.sync),
             ),
-            if (_status?.isNotEmpty == true) ...[
+            if (status?.isNotEmpty == true) ...[
               const SizedBox(height: 10),
-              SelectableText(
-                _status!,
-                style: context.textTheme.bodySmall,
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: statusBackground,
+                  border: Border.all(color: statusBorder, width: 1.4),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      isError
+                          ? Icons.error_outline
+                          : isSuccess
+                          ? Icons.check_circle_outline
+                          : Icons.info_outline,
+                      size: 21,
+                      color: statusTextColor,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SelectableText(
+                        status!,
+                        style: context.textTheme.bodyMedium?.copyWith(
+                          color: statusTextColor,
+                          fontWeight: FontWeight.w700,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
