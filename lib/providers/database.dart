@@ -459,9 +459,9 @@ class ProfileCustomRules extends _$ProfileCustomRules
         order: order,
       );
 
-  void replaceAll(List<Rule> rules) {
+  Future<void> replaceAll(List<Rule> rules) {
     final next = List<Rule>.from(rules);
-    optimistic(
+    return optimisticAsync(
       next,
       () => database.rulesDao.setProfileCustomRules(profileId, next),
     );
