@@ -190,7 +190,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _status = 'Sync failed: ${compactError(error)}';
+          _status = compactError(error);
         });
       }
     } finally {
@@ -297,7 +297,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _status = compactError(error);
+          _status = 'Sync failed: ${compactError(error)}';
         });
       }
     } finally {
