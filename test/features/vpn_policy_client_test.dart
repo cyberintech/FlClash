@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:fl_clash/features/vpn_policy/policy_client.dart';
 import 'package:fl_clash/features/vpn_policy/policy_settings.dart';
+import 'package:fl_clash/models/clash_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Adapter implements HttpClientAdapter {
