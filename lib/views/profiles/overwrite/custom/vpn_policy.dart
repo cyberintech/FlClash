@@ -1,7 +1,7 @@
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/features/vpn_policy/policy_client.dart';
 import 'package:fl_clash/features/vpn_policy/policy_settings.dart';
-import 'package:fl_clash/models/clash_config.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
@@ -152,8 +152,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(16)
-                  .copyWith(top: context.contentTopPadding),
+              padding: const EdgeInsets.all(
+                16,
+              ).copyWith(top: context.contentTopPadding),
               children: [
                 TextFormField(
                   controller: _urlController,
