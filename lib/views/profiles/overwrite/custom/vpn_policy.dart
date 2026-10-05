@@ -47,15 +47,39 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   bool _busy = false;
   bool _appsLoading = false;
   bool _installedAppsPermissionGranted = true;
+  late final ErrorWidgetBuilder _previousErrorWidgetBuilder;
 
   @override
   void initState() {
     super.initState();
+    _previousErrorWidgetBuilder = ErrorWidget.builder;
+    ErrorWidget.builder = _buildDiagnosticError;
     _load();
+  }
+
+  Widget _buildDiagnosticError(FlutterErrorDetails details) {
+    final stack = details.stack?.toString() ?? '';
+    return ColoredBox(
+      color: const Color(0xFF2D2528),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: SelectableText(
+          'VPN Policy runtime error\n\n'
+          '${details.exceptionAsString()}\n\n'
+          '$stack',
+          style: const TextStyle(
+            color: Color(0xFFFFD6D9),
+            fontSize: 13,
+            height: 1.35,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
+    ErrorWidget.builder = _previousErrorWidgetBuilder;
     _urlController.dispose();
     _keyController.dispose();
     _appSearchController.dispose();
