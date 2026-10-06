@@ -1,0 +1,45 @@
+name: Format VPN Policy branch
+
+on:
+  push:
+    branches:
+      - vpn-policy-windows-preview
+
+permissions:
+  contents: write
+
+concurrency:
+  group: format-vpn-policy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.4'
+          cache: true
+
+      - name: Format
+        run: dart format lib test tool plugins setup.dart
+
+      - name: Commit formatting
+        run: |
+          if git diff --quiet; then
+            echo "Already formatted"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib test tool plugins setup.dart
+          git commit -m "Format VPN Policy branch"
+          git push
