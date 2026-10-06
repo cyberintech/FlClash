@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
@@ -142,6 +143,15 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     _appSearchController.dispose();
     _domainController.dispose();
     super.dispose();
+  }
+
+  void _saveConnectionDraft() {
+    unawaited(
+      vpnPolicySettingsStore.saveConnection(
+        serviceUrl: _urlController.text,
+        deviceKey: _keyController.text,
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -821,7 +831,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             TextFormField(
               controller: _urlController,
               keyboardType: TextInputType.url,
-              onChanged: (_) => setState(() {}),
+              onChanged: (_) {
+                setState(() {});
+                _saveConnectionDraft();
+              },
               decoration: InputDecoration(
                 labelText: appLocalizations.url,
                 hintText: _defaultPolicyServiceUrl,
@@ -831,7 +844,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             TextFormField(
               controller: _keyController,
               obscureText: true,
-              onChanged: (_) => setState(() {}),
+              onChanged: (_) {
+                setState(() {});
+                _saveConnectionDraft();
+              },
               decoration: InputDecoration(labelText: appLocalizations.key),
             ),
             const SizedBox(height: 12),
