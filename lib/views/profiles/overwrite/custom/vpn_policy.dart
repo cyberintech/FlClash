@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
@@ -15,20 +13,6 @@ import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:yaml/yaml.dart';
-
-Object? _plainVpnPolicyYaml(Object? node) {
-  if (node is YamlMap) {
-    return {
-      for (final entry in node.entries)
-        entry.key.toString(): _plainVpnPolicyYaml(entry.value),
-    };
-  }
-  if (node is YamlList) {
-    return [for (final item in node) _plainVpnPolicyYaml(item)];
-  }
-  return node;
-}
 
 class VpnPolicyView extends ConsumerStatefulWidget {
   final int profileId;
@@ -163,97 +147,11 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _loading = false;
     });
 
-    final compatibilityTarget = await _ensureNueRealityCompatibilityOnOpen();
-    if (mounted && compatibilityTarget != null) {
-      setState(() {
-        _status = 'REALITY compatibility enabled for $compatibilityTarget';
-      });
-    }
 
     await _loadInstalledApps();
     if (settings.serviceUrl.isNotEmpty && settings.deviceKey.isNotEmpty) {
       await _refreshFromServer(applyRules: false);
     }
-  }
-
-  Future<String?> _ensureNueRealityCompatibilityOnOpen() async {
-    final candidates = ['NUE-VLESS', 'NUE-VLESS-REALITY'];
-    for (final target in candidates) {
-      if (await _ensureNueRealityCompatibility(target)) {
-        return target;
-      }
-    }
-    return null;
-  }
-
-  Future<bool> _ensureNueRealityCompatibility(String target) async {
-    final profile = ref.read(profilesProvider).getProfile(widget.profileId);
-    if (profile == null) {
-      return false;
-    }
-    final file = await profile.file;
-    if (!await file.exists()) {
-      return false;
-    }
-
-    final raw = await file.readAsString();
-    final document = _plainVpnPolicyYaml(loadYaml(raw));
-    if (document is! Map) {
-      return false;
-    }
-    final config = Map<String, dynamic>.from(document);
-    final rawProxies = config['proxies'];
-    if (rawProxies is! List) {
-      return false;
-    }
-
-    final proxies = List<dynamic>.from(rawProxies);
-    var targetIndex = -1;
-    Map<String, dynamic>? targetProxy;
-    for (var index = 0; index < proxies.length; index++) {
-      final item = proxies[index];
-      if (item is! Map) {
-        continue;
-      }
-      final definition = Map<String, dynamic>.from(item);
-      if (definition['name']?.toString() == target) {
-        targetIndex = index;
-        targetProxy = definition;
-        break;
-      }
-    }
-    if (targetProxy == null ||
-        targetProxy['type']?.toString().toLowerCase() != 'vless') {
-      return false;
-    }
-
-    final rawReality = targetProxy['reality-opts'];
-    if (rawReality is! Map) {
-      return false;
-    }
-    final reality = Map<String, dynamic>.from(rawReality);
-    if (reality['support-x25519mlkem768'] == true) {
-      return false;
-    }
-
-    reality['support-x25519mlkem768'] = true;
-    targetProxy['reality-opts'] = reality;
-    proxies[targetIndex] = targetProxy;
-    config['proxies'] = proxies;
-
-    final updated = yaml.encode(config);
-    final backup = File('${file.path}.before-vpn-policy-reality');
-    if (!await backup.exists()) {
-      await file.copy(backup.path);
-    }
-
-    final savedProfile = await profile.saveFile(
-      Uint8List.fromList(utf8.encode(updated)),
-      validate: (path) => ref.read(coreHandlerProvider).validateConfig(path),
-    );
-    ref.read(profilesProvider.notifier).put(savedProfile);
-    ref.read(setupActionProvider.notifier).autoApplyProfile();
-    return true;
   }
 
   Future<void> _loadInstalledApps() async {
@@ -385,7 +283,6 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _status = 'Syncing...';
     });
     try {
-      await _ensureNueRealityCompatibility(settings.vpnTarget);
       await vpnPolicySettingsStore.save(widget.profileId, settings);
       final results = await Future.wait([
         vpnPolicyClient.fetchCatalog(settings),
