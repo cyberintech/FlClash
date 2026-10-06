@@ -18,6 +18,19 @@ void main() {
     ]);
   });
 
+  test('Chrome-only policy keeps every other app on DIRECT', () {
+    final rules = compileLocalVpnPolicy(
+      mode: 'only_selected',
+      vpnTarget: 'NUE-VLESS',
+      appSelectors: const ['chrome.exe'],
+    );
+
+    expect(rules.map((rule) => rule.rawValue).toList(), [
+      'PROCESS-NAME,chrome.exe,NUE-VLESS',
+      'MATCH,DIRECT',
+    ]);
+  });
+
   test(
     'exclude selected routes selections direct and everything else to VPN',
     () {
