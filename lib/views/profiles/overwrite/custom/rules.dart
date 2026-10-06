@@ -1,9 +1,7 @@
-import 'dart:io';
-
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/features/overwrite/overwrite.dart';
-import 'package:fl_clash/features/vpn_policy/installed_apps.dart';
+import 'package:fl_clash/views/profiles/overwrite/custom/vpn_policy.dart';
 import 'package:fl_clash/icons/icons.dart';
 import 'package:fl_clash/models/clash_config.dart';
 import 'package:fl_clash/models/common.dart';
@@ -25,259 +23,8 @@ class CustomRulesView extends ConsumerStatefulWidget {
 class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
   int get _profileId => widget.profileId;
 
-  String _normalizeQuickDomain(String value) {
-    var domain = value.trim().toLowerCase();
-    domain = domain.replaceFirst(RegExp(r'^https?://'), '');
-    domain = domain.split('/').first;
-    domain = domain.replaceFirst(RegExp(r'^\*\.'), '');
-    return domain;
-  }
-
-  List<String> _quickTargets() {
-    final targets =
-        ref
-            .read(customOverwriteDateProvider(_profileId))
-            .ruleTargets
-            .where((target) => !RuleTarget.baseTargetNames.contains(target))
-            .toList()
-          ..sort();
-    return [RuleTarget.DIRECT.value, ...targets];
-  }
-
-  String _defaultQuickTarget(List<String> targets) {
-    for (final preferred in const ['NUE-VLESS', 'NUE-VLESS-REALITY']) {
-      if (targets.contains(preferred)) {
-        return preferred;
-      }
-    }
-    return targets.length > 1 ? targets[1] : RuleTarget.DIRECT.value;
-  }
-
-  Future<void> _handleQuickAdd(RuleAction action) async {
-    final targets = _quickTargets();
-    var target = _defaultQuickTarget(targets);
-    final controller = TextEditingController();
-    List<({String label, String selector})> apps = const [];
-    if (action == RuleAction.PROCESS_NAME) {
-      try {
-        if (Platform.isAndroid) {
-          final systemAction = ref.read(systemActionProvider.notifier);
-          var packages = await systemAction.getPackages();
-          if (packages.isEmpty &&
-              !await systemAction.isInstalledAppsPermissionGranted()) {
-            final granted = await systemAction.requestInstalledAppsPermission();
-            if (granted) {
-              packages = await systemAction.getPackages();
-            }
-          }
-          apps =
-              packages
-                  .where((item) => !item.system && item.internet)
-                  .map(
-                    (item) => (label: item.label, selector: item.packageName),
-                  )
-                  .toList()
-                ..sort(
-                  (a, b) =>
-                      a.label.toLowerCase().compareTo(b.label.toLowerCase()),
-                );
-        } else if (Platform.isWindows) {
-          apps = (await loadWindowsInstalledApps())
-              .map((item) => (label: item.label, selector: item.selector))
-              .toList();
-        }
-      } catch (_) {
-        apps = const [];
-      }
-    }
-    if (!mounted) {
-      controller.dispose();
-      return;
-    }
-
-    final result = await showDialog<Rule>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) {
-            final raw = controller.text.trim();
-            final content = action == RuleAction.DOMAIN_SUFFIX
-                ? _normalizeQuickDomain(raw)
-                : raw;
-            final canSave = content.isNotEmpty && target.isNotEmpty;
-            return AlertDialog(
-              title: Text(
-                action == RuleAction.DOMAIN_SUFFIX
-                    ? 'Quick site rule'
-                    : 'Quick app rule',
-              ),
-              content: SizedBox(
-                width: 520,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (action == RuleAction.PROCESS_NAME &&
-                        apps.isNotEmpty) ...[
-                      DropdownButtonFormField<String>(
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Installed app',
-                        ),
-                        items: [
-                          for (final app in apps)
-                            DropdownMenuItem(
-                              value: app.selector,
-                              child: Text(
-                                '${app.label} · ${app.selector}',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          controller.text = value;
-                          setDialogState(() {});
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    TextField(
-                      controller: controller,
-                      keyboardType: action == RuleAction.DOMAIN_SUFFIX
-                          ? TextInputType.url
-                          : TextInputType.text,
-                      onChanged: (_) => setDialogState(() {}),
-                      decoration: InputDecoration(
-                        labelText: action == RuleAction.DOMAIN_SUFFIX
-                            ? 'Site'
-                            : 'Process name',
-                        hintText: action == RuleAction.DOMAIN_SUFFIX
-                            ? 'example.com'
-                            : 'chrome.exe',
-                        prefixIcon: Icon(
-                          action == RuleAction.DOMAIN_SUFFIX
-                              ? Icons.language
-                              : Icons.apps,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: target,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Route via'),
-                      items: [
-                        for (final item in targets)
-                          DropdownMenuItem(value: item, child: Text(item)),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setDialogState(() {
-                            target = value;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      action == RuleAction.PROCESS_NAME
-                          ? Platform.isWindows
-                                ? 'App routing uses TUN on Windows. '
-                                      'Add & apply will enable TUN and restart '
-                                      'the core.'
-                                : 'Android app routing uses the package name. '
-                                      'Add & apply restarts the core.'
-                          : 'Rule changes take effect after core restart.',
-                      style: Theme.of(dialogContext).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: Text(context.appLocalizations.cancel),
-                ),
-                FilledButton(
-                  onPressed: !canSave
-                      ? null
-                      : () {
-                          final normalized = action == RuleAction.DOMAIN_SUFFIX
-                              ? _normalizeQuickDomain(controller.text)
-                              : controller.text.trim();
-                          Navigator.of(dialogContext).pop(
-                            Rule.parse('${action.value},$normalized,$target'),
-                          );
-                        },
-                  child: Text(
-                    ref.read(currentProfileIdProvider) == _profileId &&
-                            ref.read(isStartProvider)
-                        ? 'Add & apply'
-                        : context.appLocalizations.add,
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    controller.dispose();
-
-    if (result == null || !mounted) {
-      return;
-    }
-    final notifier = ref.read(profileCustomRulesProvider(_profileId).notifier);
-    final currentRules =
-        ref.read(profileCustomRulesProvider(_profileId)).value ??
-        const <Rule>[];
-    final sameSelector = currentRules.where(
-      (item) =>
-          item.ruleAction == result.ruleAction &&
-          item.realContent?.toLowerCase() == result.realContent?.toLowerCase(),
-    );
-    final remaining = List<Rule>.from(currentRules)
-      ..removeWhere((item) => sameSelector.contains(item));
-    final nextRules = action == RuleAction.PROCESS_NAME
-        ? [result, ...remaining]
-        : [...remaining, result];
-    await notifier.replaceAll(nextRules);
-    if (action == RuleAction.PROCESS_NAME) {
-      ref
-          .read(patchClashConfigProvider.notifier)
-          .update(
-            (state) => state.copyWith(
-              findProcessMode: FindProcessMode.always,
-              tun: Platform.isWindows
-                  ? state.tun.copyWith(enable: true)
-                  : state.tun,
-            ),
-          );
-    }
-    if (!mounted) {
-      return;
-    }
-    final isCurrent = ref.read(currentProfileIdProvider) == _profileId;
-    final isRunning = ref.read(isStartProvider);
-    if (isCurrent && isRunning) {
-      final restarted = await ref
-          .read(coreActionProvider.notifier)
-          .restartCore();
-      if (mounted) {
-        dialogs.showNotifier(
-          restarted
-              ? 'Rule added and applied: core restarted.'
-              : 'Rule saved, but core restart did not complete.',
-        );
-      }
-    } else {
-      dialogs.showNotifier(
-        'Rule added. It will apply when this profile starts.',
-      );
-    }
+  void _openSplitTunneling() {
+    BaseNavigator.push(context, VpnPolicyView(_profileId));
   }
 
   Future<void> _restartRulesCore() async {
@@ -304,25 +51,26 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Quick split tunneling',
+                'Advanced rules',
                 style: context.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 8),
+              Text(
+                'Rules here are evaluated top to bottom. For normal app/site '
+                'split tunneling use the dedicated screen, which manages the '
+                'fallback rule automatically.',
+                style: context.textTheme.bodySmall,
+              ),
+              const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  FilledButton.tonalIcon(
-                    onPressed: () => _handleQuickAdd(RuleAction.DOMAIN_SUFFIX),
-                    icon: const Icon(Icons.language),
-                    label: const Text('Site'),
-                  ),
-                  FilledButton.tonalIcon(
-                    onPressed: () => _handleQuickAdd(RuleAction.PROCESS_NAME),
-                    icon: const Icon(Icons.apps),
-                    label: const Text('App'),
+                  FilledButton.tonal(
+                    onPressed: _openSplitTunneling,
+                    child: const Text('Open split tunneling'),
                   ),
                   FilledButton.tonalIcon(
                     onPressed: isCurrent && isRunning
@@ -332,15 +80,6 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
                     label: const Text('Restart core'),
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                isCurrent && isRunning
-                    ? 'After adding, deleting or reordering rules, restart the '
-                          'core to apply the new routing.'
-                    : 'Rule changes will be applied when this profile is '
-                          'started. If it is already running, restart the core.',
-                style: context.textTheme.bodySmall,
               ),
             ],
           ),
