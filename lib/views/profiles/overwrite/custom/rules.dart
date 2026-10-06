@@ -1,14 +1,18 @@
+import 'dart:io';
+
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/features/overwrite/overwrite.dart';
+import 'package:fl_clash/features/vpn_policy/installed_apps.dart';
 import 'package:fl_clash/icons/icons.dart';
 import 'package:fl_clash/models/clash_config.dart';
 import 'package:fl_clash/models/common.dart';
 import 'package:fl_clash/models/state.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/widgets/widgets.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 
 class CustomRulesView extends ConsumerStatefulWidget {
   final int profileId;
@@ -21,6 +25,248 @@ class CustomRulesView extends ConsumerStatefulWidget {
 
 class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
   int get _profileId => widget.profileId;
+
+  String _normalizeQuickDomain(String value) {
+    var domain = value.trim().toLowerCase();
+    domain = domain.replaceFirst(RegExp(r'^https?://'), '');
+    domain = domain.split('/').first;
+    domain = domain.replaceFirst(RegExp(r'^\\*\\.'), '');
+    return domain;
+  }
+
+  List<String> _quickTargets() {
+    final targets = ref
+        .read(customOverwriteDateProvider(_profileId))
+        .ruleTargets
+        .where((target) => !RuleTarget.baseTargetNames.contains(target))
+        .toList()
+      ..sort();
+    return [RuleTarget.DIRECT.value, ...targets];
+  }
+
+  String _defaultQuickTarget(List<String> targets) {
+    for (final preferred in const ['NUE-VLESS', 'NUE-VLESS-REALITY']) {
+      if (targets.contains(preferred)) {
+        return preferred;
+      }
+    }
+    return targets.length > 1 ? targets[1] : RuleTarget.DIRECT.value;
+  }
+
+  Future<void> _handleQuickAdd(RuleAction action) async {
+    final targets = _quickTargets();
+    var target = _defaultQuickTarget(targets);
+    final controller = TextEditingController();
+    List<VpnPolicyInstalledApp> apps = const [];
+    if (action == RuleAction.PROCESS_NAME && Platform.isWindows) {
+      try {
+        apps = await loadWindowsInstalledApps();
+      } catch (_) {
+        apps = const [];
+      }
+    }
+    if (!mounted) {
+      controller.dispose();
+      return;
+    }
+
+    final result = await showDialog<Rule>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            final raw = controller.text.trim();
+            final content = action == RuleAction.DOMAIN_SUFFIX
+                ? _normalizeQuickDomain(raw)
+                : raw;
+            final canSave = content.isNotEmpty && target.isNotEmpty;
+            return AlertDialog(
+              title: Text(
+                action == RuleAction.DOMAIN_SUFFIX
+                    ? 'Quick site rule'
+                    : 'Quick app rule',
+              ),
+              content: SizedBox(
+                width: 520,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (action == RuleAction.PROCESS_NAME && apps.isNotEmpty) ...[
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Installed app',
+                        ),
+                        items: [
+                          for (final app in apps)
+                            DropdownMenuItem(
+                              value: app.selector,
+                              child: Text(
+                                '${app.label} · ${app.selector}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          controller.text = value;
+                          setDialogState(() {});
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    TextField(
+                      controller: controller,
+                      keyboardType: action == RuleAction.DOMAIN_SUFFIX
+                          ? TextInputType.url
+                          : TextInputType.text,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        labelText: action == RuleAction.DOMAIN_SUFFIX
+                            ? 'Site'
+                            : 'Process name',
+                        hintText: action == RuleAction.DOMAIN_SUFFIX
+                            ? 'example.com'
+                            : 'chrome.exe',
+                        prefixIcon: Icon(
+                          action == RuleAction.DOMAIN_SUFFIX
+                              ? Icons.language
+                              : Icons.apps,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: target,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Route via'),
+                      items: [
+                        for (final item in targets)
+                          DropdownMenuItem(value: item, child: Text(item)),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() {
+                            target = value;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      action == RuleAction.PROCESS_NAME
+                          ? 'Apps that bypass the system proxy require TUN. '
+                                'Rule changes take effect after core restart.'
+                          : 'Rule changes take effect after core restart.',
+                      style: Theme.of(dialogContext).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: Text(context.appLocalizations.cancel),
+                ),
+                FilledButton(
+                  onPressed: !canSave
+                      ? null
+                      : () {
+                          final normalized = action == RuleAction.DOMAIN_SUFFIX
+                              ? _normalizeQuickDomain(controller.text)
+                              : controller.text.trim();
+                          Navigator.of(dialogContext).pop(
+                            Rule.parse(
+                              '${action.value},$normalized,$target',
+                            ),
+                          );
+                        },
+                  child: Text(context.appLocalizations.add),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+
+    if (result == null || !mounted) {
+      return;
+    }
+    ref.read(profileCustomRulesProvider(_profileId).notifier).put(result);
+    dialogs.showNotifier('Rule added. Restart core to apply it.');
+  }
+
+  Future<void> _restartRulesCore() async {
+    final isCurrent = ref.read(currentProfileIdProvider) == _profileId;
+    if (!isCurrent || !ref.read(isStartProvider)) {
+      return;
+    }
+    final restarted = await ref.read(coreActionProvider.notifier).restartCore();
+    if (mounted && restarted) {
+      dialogs.showNotifier('Rules applied: core restarted.');
+    }
+  }
+
+  Widget _buildQuickHeader() {
+    final isCurrent = ref.watch(currentProfileIdProvider) == _profileId;
+    final isRunning = ref.watch(isStartProvider);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, context.contentTopPadding, 16, 8),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Quick split tunneling',
+                style: context.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: () => _handleQuickAdd(RuleAction.DOMAIN_SUFFIX),
+                    icon: const Icon(Icons.language),
+                    label: const Text('Site'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: () => _handleQuickAdd(RuleAction.PROCESS_NAME),
+                    icon: const Icon(Icons.apps),
+                    label: const Text('App'),
+                  ),
+                  FilledButton.tonalIcon(
+                    onPressed: isCurrent && isRunning ? _restartRulesCore : null,
+                    icon: const Icon(Icons.restart_alt),
+                    label: const Text('Restart core'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isCurrent && isRunning
+                    ? 'After adding, deleting or reordering rules, restart the '
+                          'core to apply the new routing.'
+                    : 'Rule changes will be applied when this profile is '
+                          'started. If it is already running, restart the core.',
+                style: context.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   void _handleReorder(int oldIndex, int newIndex) {
     ref
@@ -76,6 +322,7 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
     final overwrite = ref.watch(customOverwriteDateProvider(_profileId));
     return OverwriteEditorPage<Rule, int>(
       title: appLocalizations.rule,
+      header: _buildQuickHeader(),
       selectionEnabled: true,
       dragFromRow: true,
       idOf: (rule) => rule.id,
