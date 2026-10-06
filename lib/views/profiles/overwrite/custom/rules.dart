@@ -29,7 +29,7 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
     var domain = value.trim().toLowerCase();
     domain = domain.replaceFirst(RegExp(r'^https?://'), '');
     domain = domain.split('/').first;
-    domain = domain.replaceFirst(RegExp(r'^\\*\\.'), '');
+    domain = domain.replaceFirst(RegExp(r'^\*\.'), '');
     return domain;
   }
 
