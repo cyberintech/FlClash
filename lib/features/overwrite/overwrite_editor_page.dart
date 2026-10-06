@@ -31,6 +31,7 @@ class OverwriteEditorPage<T, K> extends ConsumerStatefulWidget {
   final K Function(T item) idOf;
   final void Function(Set<K> ids)? onDelete;
   final Iterable<String?> Function(T item)? searchFieldsOf;
+  final Widget? header;
 
   const OverwriteEditorPage({
     super.key,
@@ -46,6 +47,7 @@ class OverwriteEditorPage<T, K> extends ConsumerStatefulWidget {
     required this.idOf,
     this.onDelete,
     this.searchFieldsOf,
+    this.header,
   });
 
   @override
@@ -203,17 +205,24 @@ class _OverwriteEditorPageState<T, K>
           ),
       ],
       selectionActions: isSelecting ? selectionActions : const [],
-      body: NullStatusSwitcher(
-        isLoading: loadedItems == null,
-        isEmpty: items.isEmpty,
-        isSearching: isSearching,
-        nullStatus: NullStatus(label: widget.emptyLabel),
-        child: CommonScrollBar(
-          controller: _scrollController,
-          child: isSearching
-              ? _buildSearchResults(context, items, selected)
-              : _buildReorderableList(context, items, selected),
-        ),
+      body: Column(
+        children: [
+          if (widget.header != null) widget.header!,
+          Expanded(
+            child: NullStatusSwitcher(
+              isLoading: loadedItems == null,
+              isEmpty: items.isEmpty,
+              isSearching: isSearching,
+              nullStatus: NullStatus(label: widget.emptyLabel),
+              child: CommonScrollBar(
+                controller: _scrollController,
+                child: isSearching
+                    ? _buildSearchResults(context, items, selected)
+                    : _buildReorderableList(context, items, selected),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
