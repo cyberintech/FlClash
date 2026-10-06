@@ -475,14 +475,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     });
   }
 
-  Future<void> _saveAndApply(List<String> targets) async {
-    final url = _urlController.text.trim();
-    final key = _keyController.text.trim();
-    if (url.isEmpty && key.isEmpty) {
-      await _saveLocalAndApply(targets);
-      return;
-    }
-
+  Future<void> _saveToPolicyServiceAndApply(List<String> targets) async {
     final settings = _connectionSettings(targets);
     if (settings == null) {
       return;
@@ -939,13 +932,20 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               _domainsSection(),
               const SizedBox(height: 12),
               FilledButton(
-                onPressed: _busy ? null : () => _saveAndApply(targets),
+                onPressed: _busy ? null : () => _saveLocalAndApply(targets),
                 child: _busy
                     ? const SizedBox.square(
                         dimension: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Apply rules'),
+                    : const Text('Apply on this device'),
+              ),
+              const SizedBox(height: 8),
+              FilledButton.tonal(
+                onPressed: _busy
+                    ? null
+                    : () => _saveToPolicyServiceAndApply(targets),
+                child: const Text('Save to Policy Service'),
               ),
               if (_payload != null && _payload!.revision.isNotEmpty) ...[
                 const SizedBox(height: 6),
