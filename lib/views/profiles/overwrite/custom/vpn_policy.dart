@@ -8,6 +8,7 @@ import 'package:fl_clash/features/vpn_policy/local_policy.dart';
 import 'package:fl_clash/features/vpn_policy/policy_catalog.dart';
 import 'package:fl_clash/features/vpn_policy/policy_client.dart';
 import 'package:fl_clash/features/vpn_policy/policy_payload.dart';
+import 'package:fl_clash/features/vpn_policy/policy_rule_set.dart';
 import 'package:fl_clash/features/vpn_policy/policy_settings.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
@@ -39,6 +40,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   final _selectedServices = <String>{};
   final _selectedCustomApps = <String>{};
   final _customDomains = <String>[];
+  List<VpnPolicyRuleSet> _serverRuleSets = const [];
 
   List<Package> _androidPackages = const [];
   List<VpnPolicyInstalledApp> _windowsApps = const [];
@@ -50,6 +52,8 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   bool _busy = false;
   bool _appsLoading = false;
   bool _appsExpanded = false;
+  bool _domainsExpanded = false;
+  bool _ruleSetsLoading = false;
   bool _installedAppsPermissionGranted = true;
   late final ErrorWidgetBuilder _previousErrorWidgetBuilder;
 
@@ -460,6 +464,67 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         });
       }
     }
+  }
+
+  Future<void> _loadServerRuleSets(List<String> targets) async {
+    final settings = _connectionSettings(targets);
+    if (settings == null) {
+      return;
+    }
+    setState(() {
+      _ruleSetsLoading = true;
+      _status = null;
+    });
+    try {
+      await vpnPolicySettingsStore.save(widget.profileId, settings);
+      final ruleSets = await vpnPolicyClient.fetchRuleSets(settings);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = settings;
+        _serverRuleSets = ruleSets;
+        _status = 'Loaded ${ruleSets.length} server rule set(s)';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _status = 'Rule set load failed: ${compactError(error)}';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _ruleSetsLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _importRuleSetAndApply(
+    VpnPolicyRuleSet ruleSet,
+    List<String> targets,
+  ) async {
+    final beforeApps = _localAppSelectors().toSet();
+    final beforeDomains = _localDomains().toSet();
+    setState(() {
+      _selectedCustomApps.addAll(ruleSet.appSelectors);
+      for (final domain in ruleSet.domains) {
+        if (!_customDomains.contains(domain)) {
+          _customDomains.add(domain);
+        }
+      }
+    });
+    await _saveLocalAndApply(targets);
+    if (!mounted) {
+      return;
+    }
+    final addedApps = _localAppSelectors().toSet().difference(beforeApps).length;
+    final addedDomains = _localDomains().toSet().difference(beforeDomains).length;
+    setState(() {
+      _status =
+          'Imported ${ruleSet.name}: +$addedDomains domains, +$addedApps apps';
+    });
   }
 
   Future<void> _refreshFromServer({
@@ -1041,9 +1106,27 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   }
 
   Widget _domainsSection() {
+    final count = _customDomains.length;
     return _Section(
-      title: context.appLocalizations.domain,
+      title: count == 0
+          ? context.appLocalizations.domain
+          : '${context.appLocalizations.domain} · $count selected',
+      onHeaderTap: count == 0
+          ? null
+          : () {
+              setState(() {
+                _domainsExpanded = !_domainsExpanded;
+              });
+            },
+      trailing: count == 0
+          ? null
+          : Icon(
+              _domainsExpanded ? Icons.expand_less : Icons.expand_more,
+              size: 30,
+              color: context.colorScheme.onSurface,
+            ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
@@ -1065,24 +1148,102 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               ),
             ],
           ),
-          if (_customDomains.isNotEmpty) ...[
+          if (count > 0) ...[
             const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final domain in _customDomains)
-                    InputChip(
-                      label: Text(domain),
-                      onDeleted: () {
-                        setState(() {
-                          _customDomains.remove(domain);
-                        });
-                      },
-                    ),
-                ],
+            if (!_domainsExpanded)
+              Text(
+                '$count domains selected. Tap the header to manage them.',
+                style: context.textTheme.bodyMedium?.copyWith(
+                  color: context.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final domain in _customDomains)
+                      InputChip(
+                        label: Text(domain),
+                        onDeleted: () {
+                          setState(() {
+                            _customDomains.remove(domain);
+                          });
+                        },
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _serverRuleSetsSection(List<String> targets) {
+    final configured =
+        _urlController.text.trim().isNotEmpty &&
+        _keyController.text.trim().isNotEmpty;
+    return _Section(
+      title: 'Server rule sets',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Import reusable rules once. After import they become local and '
+            'can be edited independently on this device.',
+            style: context.textTheme.bodyMedium?.copyWith(
+              color: context.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (_serverRuleSets.isEmpty)
+            FilledButton.tonal(
+              onPressed: !configured || _ruleSetsLoading
+                  ? null
+                  : () => _loadServerRuleSets(targets),
+              child: _ruleSetsLoading
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Load server rule sets'),
+            )
+          else ...[
+            for (final ruleSet in _serverRuleSets)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(ruleSet.name),
+                subtitle: Text(
+                  [
+                    if (ruleSet.description.isNotEmpty) ruleSet.description,
+                    '${ruleSet.domains.length} domains · '
+                        '${ruleSet.appSelectors.length} apps',
+                  ].join('\n'),
+                ),
+                trailing: FilledButton.tonal(
+                  onPressed: _busy
+                      ? null
+                      : () => _importRuleSetAndApply(ruleSet, targets),
+                  child: const Text('Import & apply'),
+                ),
+              ),
+            TextButton(
+              onPressed: _ruleSetsLoading
+                  ? null
+                  : () => _loadServerRuleSets(targets),
+              child: const Text('Refresh server rule sets'),
+            ),
+          ],
+          if (!configured) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Configure Policy Service URL and Device Key below first.',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: context.colorScheme.onSurfaceVariant,
               ),
             ),
           ],
@@ -1108,6 +1269,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             ).copyWith(top: context.contentTopPadding),
             children: [
               _modeSection(),
+              _serverRuleSetsSection(targets),
               _domainsSection(),
               _appsSection(),
               if (_catalog != null) _servicesSection(),
