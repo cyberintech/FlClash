@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/features/vpn_policy/policy_catalog.dart';
 import 'package:fl_clash/features/vpn_policy/policy_payload.dart';
+import 'package:fl_clash/features/vpn_policy/policy_rule_set.dart';
 import 'package:fl_clash/features/vpn_policy/policy_settings.dart';
 
 class VpnPolicyClient {
@@ -28,6 +29,26 @@ class VpnPolicyClient {
       throw StateError('Policy Service returned no catalog');
     }
     return VpnPolicyCatalog.fromJson(data);
+  }
+
+  Future<List<VpnPolicyRuleSet>> fetchRuleSets(
+    VpnPolicySettings settings,
+  ) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '${_base(settings)}/client/v1/rule-sets',
+      options: _options(settings),
+    );
+    final data = response.data;
+    if (data == null) {
+      throw StateError('Policy Service returned no rule sets');
+    }
+    return (data['rule_sets'] as List? ?? const [])
+        .map(
+          (value) => VpnPolicyRuleSet.fromJson(
+            Map<String, dynamic>.from(value as Map),
+          ),
+        )
+        .toList(growable: false);
   }
 
   Future<VpnPolicyPayload> fetch(
