@@ -184,7 +184,12 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
                             ),
                           );
                         },
-                  child: Text(context.appLocalizations.add),
+                  child: Text(
+                    ref.read(currentProfileIdProvider) == _profileId &&
+                            ref.read(isStartProvider)
+                        ? 'Add & apply'
+                        : context.appLocalizations.add,
+                  ),
                 ),
               ],
             );
@@ -197,8 +202,28 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
     if (result == null || !mounted) {
       return;
     }
-    ref.read(profileCustomRulesProvider(_profileId).notifier).put(result);
-    dialogs.showNotifier('Rule added. Restart core to apply it.');
+    final notifier = ref.read(profileCustomRulesProvider(_profileId).notifier);
+    final currentRules =
+        ref.read(profileCustomRulesProvider(_profileId)).value ??
+        const <Rule>[];
+    await notifier.replaceAll([...currentRules, result]);
+    if (!mounted) {
+      return;
+    }
+    final isCurrent = ref.read(currentProfileIdProvider) == _profileId;
+    final isRunning = ref.read(isStartProvider);
+    if (isCurrent && isRunning) {
+      final restarted = await ref.read(coreActionProvider.notifier).restartCore();
+      if (mounted) {
+        dialogs.showNotifier(
+          restarted
+              ? 'Rule added and applied: core restarted.'
+              : 'Rule saved, but core restart did not complete.',
+        );
+      }
+    } else {
+      dialogs.showNotifier('Rule added. It will apply when this profile starts.');
+    }
   }
 
   Future<void> _restartRulesCore() async {
