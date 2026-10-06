@@ -42,8 +42,10 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
     if (lastMovableIndex < 0) {
       return;
     }
-    final targetIndex = (index + delta).clamp(0, lastMovableIndex);
-    if (targetIndex == index) {
+    final targetIndex = index + delta;
+    if (targetIndex < 0 ||
+        targetIndex > lastMovableIndex ||
+        targetIndex == index) {
       return;
     }
     ref
