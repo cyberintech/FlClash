@@ -448,8 +448,21 @@ class SetupAction extends _$SetupAction {
       proxyGroups.addAll(setupState.proxyGroups);
       rules.addAll(setupState.rules);
     }
+    final needsProcessLookup = [...rules, ...addedRules].any(
+      (rule) => const {
+        RuleAction.PROCESS_NAME,
+        RuleAction.PROCESS_NAME_REGEX,
+        RuleAction.PROCESS_NAME_WILDCARD,
+        RuleAction.PROCESS_PATH,
+        RuleAction.PROCESS_PATH_REGEX,
+        RuleAction.PROCESS_PATH_WILDCARD,
+      }.contains(rule.ruleAction),
+    );
     final realPatchConfig = patchConfig.copyWith(
       tun: patchConfig.tun.getRealTun(routeMode),
+      findProcessMode: needsProcessLookup
+          ? FindProcessMode.always
+          : patchConfig.findProcessMode,
     );
     Map<String, dynamic> rawConfig = configMap;
     if (scriptContent?.isNotEmpty == true) {
