@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/database/database.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/features/vpn_policy/installed_apps.dart';
 import 'package:fl_clash/features/vpn_policy/local_policy.dart';
@@ -289,6 +290,37 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     }
   }
 
+  Future<List<CustomProxy>> _readCurrentConfigProxies() async {
+    final rawProxies =
+        (await ref.read(coreHandlerProvider).getConfig(widget.profileId))['proxies'];
+    if (rawProxies != null && rawProxies is! List) {
+      throw const FormatException('proxies');
+    }
+    return [
+      for (final item in rawProxies ?? const [])
+        if (item is Map) CustomProxy.fromDefinition(item),
+    ];
+  }
+
+  Future<void> _ensureCustomOverwrite() async {
+    final profile = ref.read(profileProvider(widget.profileId));
+    if (profile == null || profile.overwriteType == OverwriteType.custom) {
+      return;
+    }
+    final clashConfig = await ref.read(clashConfigProvider(widget.profileId).future);
+    final proxies = feature.customProxies ? await _readCurrentConfigProxies() : null;
+    await database.setProfileCustomData(
+      widget.profileId,
+      proxies,
+      clashConfig.proxyGroups,
+      clashConfig.rules,
+    );
+    ref.read(profilesProvider.notifier).updateProfile(
+      widget.profileId,
+      (state) => state.copyWith(overwriteType: OverwriteType.custom),
+    );
+  }
+
   void _configureProcessRouting(Iterable<Rule> rules) {
     final hasProcessRules = rules.any(
       (rule) => const {
@@ -313,6 +345,11 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 : state.tun,
           ),
         );
+    if (Platform.isWindows) {
+      ref
+          .read(networkSettingProvider.notifier)
+          .update((state) => state.copyWith(systemProxy: false));
+    }
   }
 
   List<String> _localAppSelectors() {
@@ -372,6 +409,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _status = null;
     });
     try {
+      await _ensureCustomOverwrite();
       await ref
           .read(profileCustomRulesProvider(widget.profileId).notifier)
           .replaceAll(rules);
@@ -431,6 +469,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       final catalog = results[0] as VpnPolicyCatalog;
       final payload = results[1] as VpnPolicyPayload;
       if (applyRules) {
+        await _ensureCustomOverwrite();
         await ref
             .read(profileCustomRulesProvider(widget.profileId).notifier)
             .replaceAll(payload.rules);
@@ -516,6 +555,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         customDomains: List<String>.from(_customDomains),
         customAppSelectors: _selectedCustomApps.toList()..sort(),
       );
+      await _ensureCustomOverwrite();
       await ref
           .read(profileCustomRulesProvider(widget.profileId).notifier)
           .replaceAll(payload.rules);
@@ -607,7 +647,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         : const Color(0xFF1E3A5F);
     return [
       _Section(
-        title: 'Policy Service',
+        title: 'Policy Service (optional)',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -786,10 +826,11 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         children: [
           TextField(
             controller: _appSearchController,
+            autofocus: Platform.isWindows,
             onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              hintText: context.appLocalizations.search,
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Search apps by name, .exe or package',
             ),
           ),
           if (Platform.isAndroid && !_installedAppsPermissionGranted) ...[
@@ -946,12 +987,11 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               16,
             ).copyWith(top: context.contentTopPadding),
             children: [
-              ..._connectionSection(context, targets),
               _modeSection(),
               _appsSection(),
-              _servicesSection(),
               _domainsSection(),
-              const SizedBox(height: 12),
+              if (_catalog != null) _servicesSection(),
+              const SizedBox(height: 4),
               FilledButton(
                 onPressed: _busy ? null : () => _saveLocalAndApply(targets),
                 child: _busy
@@ -959,9 +999,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                         dimension: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Apply on this device'),
+                    : const Text('Apply split tunneling'),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
+              ..._connectionSection(context, targets),
               FilledButton.tonal(
                 onPressed: _busy
                     ? null
@@ -976,7 +1017,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           );
 
     return BaseScaffold(
-      title: 'VPN Policy',
+      title: 'Split tunneling',
       body: Localizations.override(
         context: context,
         locale: const Locale('en'),
