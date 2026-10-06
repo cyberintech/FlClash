@@ -254,10 +254,13 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
         ? [result, ...remaining]
         : [...remaining, result];
     await notifier.replaceAll(nextRules);
-    if (action == RuleAction.PROCESS_NAME && Platform.isWindows) {
-      ref
-          .read(patchClashConfigProvider.notifier)
-          .update((state) => state.copyWith.tun(enable: true));
+    if (action == RuleAction.PROCESS_NAME) {
+      ref.read(patchClashConfigProvider.notifier).update(
+        (state) => state.copyWith(
+          findProcessMode: FindProcessMode.always,
+          tun: Platform.isWindows ? state.tun.copyWith(enable: true) : state.tun,
+        ),
+      );
     }
     if (!mounted) {
       return;
