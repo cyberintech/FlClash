@@ -26,7 +26,22 @@ void main() {
     );
 
     expect(rules.map((rule) => rule.rawValue).toList(), [
+      'AND,((PROCESS-NAME,chrome.exe),(NETWORK,UDP),(DST-PORT,443)),REJECT',
       'PROCESS-NAME,chrome.exe,NUE-VLESS',
+      'MATCH,DIRECT',
+    ]);
+  });
+
+  test('YouTube app over NUE forces TCP fallback from QUIC', () {
+    final rules = compileLocalVpnPolicy(
+      mode: 'only_selected',
+      vpnTarget: 'NUE-VLESS',
+      appSelectors: const ['com.google.android.youtube'],
+    );
+
+    expect(rules.map((rule) => rule.rawValue).toList(), [
+      'AND,((PROCESS-NAME,com.google.android.youtube),(NETWORK,UDP),(DST-PORT,443)),REJECT',
+      'PROCESS-NAME,com.google.android.youtube,NUE-VLESS',
       'MATCH,DIRECT',
     ]);
   });
@@ -55,6 +70,9 @@ void main() {
       domains: const ['example.com'],
     );
 
-    expect(rules.map((rule) => rule.rawValue).toList(), ['MATCH,NUE-VLESS']);
+    expect(rules.map((rule) => rule.rawValue).toList(), [
+      'AND,((NETWORK,UDP),(DST-PORT,443)),REJECT',
+      'MATCH,NUE-VLESS',
+    ]);
   });
 }
