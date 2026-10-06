@@ -24,9 +24,6 @@ class RuleItem extends StatelessWidget {
   final void Function() onSelected;
   final void Function(Rule rule) onEdit;
   final String? Function(Rule rule)? invalidMessageOf;
-  final bool showMoveControls;
-  final VoidCallback? onMoveUp;
-  final VoidCallback? onMoveDown;
 
   const RuleItem({
     super.key,
@@ -37,9 +34,6 @@ class RuleItem extends StatelessWidget {
     this.invalidMessageOf,
     this.isEditing = false,
     this.hasMatch = false,
-    this.showMoveControls = false,
-    this.onMoveUp,
-    this.onMoveDown,
   });
 
   ({bool invalid, Color? color, String? message}) _checkInvalid(
@@ -148,31 +142,6 @@ class RuleItem extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (showMoveControls) ...[
-                  const SizedBox(width: 6),
-                  IconButton(
-                    tooltip: 'Move up',
-                    onPressed: onMoveUp,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 32,
-                      height: 32,
-                    ),
-                    icon: const Icon(Icons.keyboard_arrow_up, size: 20),
-                  ),
-                  IconButton(
-                    tooltip: 'Move down',
-                    onPressed: onMoveDown,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 32,
-                      height: 32,
-                    ),
-                    icon: const Icon(Icons.keyboard_arrow_down, size: 20),
-                  ),
-                ],
               ],
             );
           },
