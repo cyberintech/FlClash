@@ -363,20 +363,24 @@ class SetupAction extends _$SetupAction {
         continue;
       }
       final reality = Map<String, dynamic>.from(proxy['reality-opts'] as Map);
-      if (reality['support-x25519mlkem768'] == true) {
-        nextProxies.add(rawProxy);
-        continue;
+      var proxyChanged = false;
+      if (reality['support-x25519mlkem768'] != true) {
+        reality['support-x25519mlkem768'] = true;
+        proxy['reality-opts'] = reality;
+        proxyChanged = true;
       }
-      reality['support-x25519mlkem768'] = true;
-      proxy['reality-opts'] = reality;
-      nextProxies.add(proxy);
-      changed = true;
+      if (proxy['packet-encoding'] != 'xudp') {
+        proxy['packet-encoding'] = 'xudp';
+        proxyChanged = true;
+      }
+      nextProxies.add(proxyChanged ? proxy : rawProxy);
+      changed = changed || proxyChanged;
     }
 
     if (!changed) {
       return source;
     }
-    commonPrint.log('VPN Policy: enabled X25519MLKEM768 for NUE REALITY proxy');
+    commonPrint.log('VPN Policy: enabled NUE REALITY compatibility and XUDP');
     return {...source, 'proxies': nextProxies};
   }
 
@@ -388,13 +392,21 @@ class SetupAction extends _$SetupAction {
       return customProxy;
     }
     final reality = Map<String, dynamic>.from(proxy['reality-opts'] as Map);
-    if (reality['support-x25519mlkem768'] == true) {
+    var changed = false;
+    if (reality['support-x25519mlkem768'] != true) {
+      reality['support-x25519mlkem768'] = true;
+      proxy['reality-opts'] = reality;
+      changed = true;
+    }
+    if (proxy['packet-encoding'] != 'xudp') {
+      proxy['packet-encoding'] = 'xudp';
+      changed = true;
+    }
+    if (!changed) {
       return customProxy;
     }
-    reality['support-x25519mlkem768'] = true;
-    proxy['reality-opts'] = reality;
     commonPrint.log(
-      'VPN Policy: enabled X25519MLKEM768 for custom NUE REALITY proxy',
+      'VPN Policy: enabled NUE REALITY compatibility and XUDP',
     );
     return customProxy.copyWith(definition: proxy);
   }
