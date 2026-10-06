@@ -313,10 +313,12 @@ class RulesDao extends DatabaseAccessor<Database> with _$RulesDaoMixin {
     if (scene == RuleScene.custom) {
       query.orderBy([
         OrderingTerm.asc(
-          rules.ruleAction.equalsValue(RuleAction.MATCH).caseMatch<int>(
-            when: {const Constant(true): const Constant(1)},
-            orElse: const Constant(0),
-          ),
+          rules.ruleAction
+              .equalsValue(RuleAction.MATCH)
+              .caseMatch<int>(
+                when: {const Constant(true): const Constant(1)},
+                orElse: const Constant(0),
+              ),
         ),
         OrderingTerm.asc(profileRuleLinks.order),
       ]);

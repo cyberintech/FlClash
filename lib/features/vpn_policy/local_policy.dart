@@ -40,9 +40,7 @@ List<Rule> compileLocalVpnPolicy({
       continue;
     }
     rules.add(
-      Rule.parse(
-        '${RuleAction.PROCESS_NAME.value},$selector,$selectedTarget',
-      ),
+      Rule.parse('${RuleAction.PROCESS_NAME.value},$selector,$selectedTarget'),
     );
   }
 
@@ -53,9 +51,7 @@ List<Rule> compileLocalVpnPolicy({
       continue;
     }
     rules.add(
-      Rule.parse(
-        '${RuleAction.DOMAIN_SUFFIX.value},$domain,$selectedTarget',
-      ),
+      Rule.parse('${RuleAction.DOMAIN_SUFFIX.value},$domain,$selectedTarget'),
     );
   }
 

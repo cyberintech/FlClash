@@ -332,10 +332,7 @@ class SetupAction extends _$SetupAction {
     }
   }
 
-  static const _vpnPolicyNueTargets = {
-    'NUE-VLESS',
-    'NUE-VLESS-REALITY',
-  };
+  static const _vpnPolicyNueTargets = {'NUE-VLESS', 'NUE-VLESS-REALITY'};
 
   bool _isVpnPolicyNueRealityProxy(Map<String, dynamic> proxy) {
     final name = proxy['name']?.toString();
@@ -365,9 +362,7 @@ class SetupAction extends _$SetupAction {
         nextProxies.add(rawProxy);
         continue;
       }
-      final reality = Map<String, dynamic>.from(
-        proxy['reality-opts'] as Map,
-      );
+      final reality = Map<String, dynamic>.from(proxy['reality-opts'] as Map);
       if (reality['support-x25519mlkem768'] == true) {
         nextProxies.add(rawProxy);
         continue;
@@ -381,13 +376,8 @@ class SetupAction extends _$SetupAction {
     if (!changed) {
       return source;
     }
-    commonPrint.log(
-      'VPN Policy: enabled X25519MLKEM768 for NUE REALITY proxy',
-    );
-    return {
-      ...source,
-      'proxies': nextProxies,
-    };
+    commonPrint.log('VPN Policy: enabled X25519MLKEM768 for NUE REALITY proxy');
+    return {...source, 'proxies': nextProxies};
   }
 
   CustomProxy _applyVpnPolicyNueRealityCompatibilityToCustomProxy(

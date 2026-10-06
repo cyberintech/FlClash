@@ -11,31 +11,28 @@ void main() {
       domains: const ['https://ifconfig.me/path'],
     );
 
-    expect(
-      rules.map((rule) => rule.rawValue).toList(),
-      [
-        'PROCESS-NAME,org.telegram.messenger,NUE-VLESS',
-        'DOMAIN-SUFFIX,ifconfig.me,NUE-VLESS',
-        'MATCH,DIRECT',
-      ],
-    );
+    expect(rules.map((rule) => rule.rawValue).toList(), [
+      'PROCESS-NAME,org.telegram.messenger,NUE-VLESS',
+      'DOMAIN-SUFFIX,ifconfig.me,NUE-VLESS',
+      'MATCH,DIRECT',
+    ]);
   });
 
-  test('exclude selected routes selections direct and everything else to VPN', () {
-    final rules = compileLocalVpnPolicy(
-      mode: 'exclude_selected',
-      vpnTarget: 'NUE-VLESS',
-      appSelectors: const ['ru.oneme.app'],
-    );
+  test(
+    'exclude selected routes selections direct and everything else to VPN',
+    () {
+      final rules = compileLocalVpnPolicy(
+        mode: 'exclude_selected',
+        vpnTarget: 'NUE-VLESS',
+        appSelectors: const ['ru.oneme.app'],
+      );
 
-    expect(
-      rules.map((rule) => rule.rawValue).toList(),
-      [
+      expect(rules.map((rule) => rule.rawValue).toList(), [
         'PROCESS-NAME,ru.oneme.app,DIRECT',
         'MATCH,NUE-VLESS',
-      ],
-    );
-  });
+      ]);
+    },
+  );
 
   test('all vpn only needs a VPN fallback rule', () {
     final rules = compileLocalVpnPolicy(
@@ -45,9 +42,6 @@ void main() {
       domains: const ['example.com'],
     );
 
-    expect(
-      rules.map((rule) => rule.rawValue).toList(),
-      ['MATCH,NUE-VLESS'],
-    );
+    expect(rules.map((rule) => rule.rawValue).toList(), ['MATCH,NUE-VLESS']);
   });
 }

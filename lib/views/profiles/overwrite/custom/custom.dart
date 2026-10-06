@@ -97,8 +97,9 @@ class CustomContent extends ConsumerWidget {
         issueCounts.proxies + issueCounts.proxyGroups + issueCounts.rules;
     final generalIssues = ref
         .watch(
-          customOverwriteIssuesProvider(profileId)
-              .select((state) => SelectValue(state.general)),
+          customOverwriteIssuesProvider(
+            profileId,
+          ).select((state) => SelectValue(state.general)),
         )
         .value;
     final issueMessages = [

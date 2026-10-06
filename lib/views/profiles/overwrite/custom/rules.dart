@@ -34,12 +34,13 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
   }
 
   List<String> _quickTargets() {
-    final targets = ref
-        .read(customOverwriteDateProvider(_profileId))
-        .ruleTargets
-        .where((target) => !RuleTarget.baseTargetNames.contains(target))
-        .toList()
-      ..sort();
+    final targets =
+        ref
+            .read(customOverwriteDateProvider(_profileId))
+            .ruleTargets
+            .where((target) => !RuleTarget.baseTargetNames.contains(target))
+            .toList()
+          ..sort();
     return [RuleTarget.DIRECT.value, ...targets];
   }
 
@@ -64,8 +65,7 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
           var packages = await systemAction.getPackages();
           if (packages.isEmpty &&
               !await systemAction.isInstalledAppsPermissionGranted()) {
-            final granted =
-                await systemAction.requestInstalledAppsPermission();
+            final granted = await systemAction.requestInstalledAppsPermission();
             if (granted) {
               packages = await systemAction.getPackages();
             }
@@ -74,10 +74,7 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
               packages
                   .where((item) => !item.system && item.internet)
                   .map(
-                    (item) => (
-                      label: item.label,
-                      selector: item.packageName,
-                    ),
+                    (item) => (label: item.label, selector: item.packageName),
                   )
                   .toList()
                 ..sort(
@@ -86,12 +83,7 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
                 );
         } else if (Platform.isWindows) {
           apps = (await loadWindowsInstalledApps())
-              .map(
-                (item) => (
-                  label: item.label,
-                  selector: item.selector,
-                ),
-              )
+              .map((item) => (label: item.label, selector: item.selector))
               .toList();
         }
       } catch (_) {
@@ -125,7 +117,8 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (action == RuleAction.PROCESS_NAME && apps.isNotEmpty) ...[
+                    if (action == RuleAction.PROCESS_NAME &&
+                        apps.isNotEmpty) ...[
                       DropdownButtonFormField<String>(
                         isExpanded: true,
                         decoration: const InputDecoration(
@@ -216,9 +209,7 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
                               ? _normalizeQuickDomain(controller.text)
                               : controller.text.trim();
                           Navigator.of(dialogContext).pop(
-                            Rule.parse(
-                              '${action.value},$normalized,$target',
-                            ),
+                            Rule.parse('${action.value},$normalized,$target'),
                           );
                         },
                   child: Text(
@@ -255,12 +246,16 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
         : [...remaining, result];
     await notifier.replaceAll(nextRules);
     if (action == RuleAction.PROCESS_NAME) {
-      ref.read(patchClashConfigProvider.notifier).update(
-        (state) => state.copyWith(
-          findProcessMode: FindProcessMode.always,
-          tun: Platform.isWindows ? state.tun.copyWith(enable: true) : state.tun,
-        ),
-      );
+      ref
+          .read(patchClashConfigProvider.notifier)
+          .update(
+            (state) => state.copyWith(
+              findProcessMode: FindProcessMode.always,
+              tun: Platform.isWindows
+                  ? state.tun.copyWith(enable: true)
+                  : state.tun,
+            ),
+          );
     }
     if (!mounted) {
       return;
@@ -268,7 +263,9 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
     final isCurrent = ref.read(currentProfileIdProvider) == _profileId;
     final isRunning = ref.read(isStartProvider);
     if (isCurrent && isRunning) {
-      final restarted = await ref.read(coreActionProvider.notifier).restartCore();
+      final restarted = await ref
+          .read(coreActionProvider.notifier)
+          .restartCore();
       if (mounted) {
         dialogs.showNotifier(
           restarted
@@ -277,7 +274,9 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
         );
       }
     } else {
-      dialogs.showNotifier('Rule added. It will apply when this profile starts.');
+      dialogs.showNotifier(
+        'Rule added. It will apply when this profile starts.',
+      );
     }
   }
 
@@ -326,7 +325,9 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
                     label: const Text('App'),
                   ),
                   FilledButton.tonalIcon(
-                    onPressed: isCurrent && isRunning ? _restartRulesCore : null,
+                    onPressed: isCurrent && isRunning
+                        ? _restartRulesCore
+                        : null,
                     icon: const Icon(Icons.restart_alt),
                     label: const Text('Restart core'),
                   ),
@@ -421,9 +422,7 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
             final movable = rule.ruleAction != RuleAction.MATCH;
             final canMoveUp = movable && currentIndex > 0;
             final canMoveDown =
-                movable &&
-                currentIndex >= 0 &&
-                currentIndex < lastMovableIndex;
+                movable && currentIndex >= 0 && currentIndex < lastMovableIndex;
             return Row(
               children: [
                 Expanded(
@@ -450,8 +449,7 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
                   ),
                   IconButton(
                     tooltip: 'Move down',
-                    onPressed:
-                        canMoveDown ? () => _moveRule(rule.id, 1) : null,
+                    onPressed: canMoveDown ? () => _moveRule(rule.id, 1) : null,
                     icon: const Icon(Icons.keyboard_arrow_down),
                   ),
                 ],

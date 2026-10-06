@@ -283,7 +283,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     }
     final restarted = await ref.read(coreActionProvider.notifier).restartCore();
     if (!restarted) {
-      throw StateError('Rules were saved, but the core restart did not complete');
+      throw StateError(
+        'Rules were saved, but the core restart did not complete',
+      );
     }
   }
 
@@ -301,12 +303,16 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     if (!hasProcessRules) {
       return;
     }
-    ref.read(patchClashConfigProvider.notifier).update(
-      (state) => state.copyWith(
-        findProcessMode: FindProcessMode.always,
-        tun: Platform.isWindows ? state.tun.copyWith(enable: true) : state.tun,
-      ),
-    );
+    ref
+        .read(patchClashConfigProvider.notifier)
+        .update(
+          (state) => state.copyWith(
+            findProcessMode: FindProcessMode.always,
+            tun: Platform.isWindows
+                ? state.tun.copyWith(enable: true)
+                : state.tun,
+          ),
+        );
   }
 
   List<String> _localAppSelectors() {
@@ -994,15 +1000,11 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = dark
-        ? const Color(0xFF1B2432)
-        : const Color(0xFFF3F6FA);
+    final cardColor = dark ? const Color(0xFF1B2432) : const Color(0xFFF3F6FA);
     final borderColor = dark
         ? const Color(0xFF66758B)
         : const Color(0xFFA7B3C4);
-    final titleColor = dark
-        ? const Color(0xFFF8FAFC)
-        : const Color(0xFF172033);
+    final titleColor = dark ? const Color(0xFFF8FAFC) : const Color(0xFF172033);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
