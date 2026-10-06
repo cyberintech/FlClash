@@ -21,7 +21,7 @@ void main() {
     expect(settings.vpnTarget, isEmpty);
   });
 
-  test('round-trips profile-scoped policy sync settings', () async {
+  test('shares Policy Service connection across profiles', () async {
     const settings = VpnPolicySettings(
       serviceUrl: 'https://policy.example.com',
       deviceKey: 'device-key',
@@ -38,7 +38,26 @@ void main() {
     expect(restored.vpnTarget, settings.vpnTarget);
     expect(restored.lastRevision, settings.lastRevision);
     expect(restored.lastPolicyName, settings.lastPolicyName);
-    expect((await vpnPolicySettingsStore.load(8)).serviceUrl, isEmpty);
+
+    final otherProfile = await vpnPolicySettingsStore.load(8);
+    expect(otherProfile.serviceUrl, settings.serviceUrl);
+    expect(otherProfile.deviceKey, settings.deviceKey);
+    expect(otherProfile.vpnTarget, isEmpty);
+  });
+
+  test('migrates legacy profile connection to device-wide storage', () async {
+    await store.setString(
+      'vpn_policy_settings_7',
+      '{"serviceUrl":"https://legacy.example.com","deviceKey":"legacy-key","vpnTarget":"Proxy"}',
+    );
+
+    final migrated = await vpnPolicySettingsStore.load(7);
+    final otherProfile = await vpnPolicySettingsStore.load(8);
+
+    expect(migrated.serviceUrl, 'https://legacy.example.com');
+    expect(migrated.deviceKey, 'legacy-key');
+    expect(otherProfile.serviceUrl, 'https://legacy.example.com');
+    expect(otherProfile.deviceKey, 'legacy-key');
   });
 
   test('corrupt settings fall back to defaults', () async {
