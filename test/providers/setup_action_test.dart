@@ -1050,6 +1050,41 @@ void main() {
       );
     });
 
+    test('process rules force process lookup in the generated config', () async {
+      final profile = Profile.normal(label: 'process-routing');
+      final core = _MockCoreHandlerInterface();
+      when(() => core.getConfig(any())).thenAnswer((_) async => {});
+      final setupState = nullProfileSetupState.copyWith(
+        profileId: profile.id,
+        overwriteType: OverwriteType.custom,
+        rules: [
+          Rule.parse(
+            'PROCESS-NAME,org.telegram.messenger,DIRECT',
+            id: 21,
+          ),
+        ],
+      );
+      final scoped = ProviderContainer(
+        overrides: [
+          coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+          setupActionProvider.overrideWith(SetupAction.new),
+        ],
+      );
+      addTearDown(scoped.dispose);
+
+      final res = await scoped
+          .read(setupActionProvider.notifier)
+          .getProfile(
+            setupState: setupState,
+            patchConfig: const PatchClashConfig(
+              findProcessMode: FindProcessMode.off,
+            ),
+          );
+      final config = loadYaml(res.yaml) as YamlMap;
+
+      expect(config['find-process-mode'], 'always');
+    });
+
     test(
       'a rejected setupConfig without a handoff reports failure, not success',
       () async {
