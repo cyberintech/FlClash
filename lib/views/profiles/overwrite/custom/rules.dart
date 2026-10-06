@@ -28,6 +28,29 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
         .order(oldIndex, newIndex);
   }
 
+  void _moveRule(int ruleId, int delta) {
+    final rules =
+        ref.read(profileCustomRulesProvider(_profileId)).value ??
+        const <Rule>[];
+    final index = rules.indexWhere((item) => item.id == ruleId);
+    if (index < 0 || rules[index].ruleAction == RuleAction.MATCH) {
+      return;
+    }
+    final lastMovableIndex = rules.lastIndexWhere(
+      (item) => item.ruleAction != RuleAction.MATCH,
+    );
+    if (lastMovableIndex < 0) {
+      return;
+    }
+    final targetIndex = (index + delta).clamp(0, lastMovableIndex);
+    if (targetIndex == index) {
+      return;
+    }
+    ref
+        .read(profileCustomRulesProvider(_profileId).notifier)
+        .order(index, targetIndex);
+  }
+
   void _handleDelete(Set<int> ruleIds) {
     ref.read(profileCustomRulesProvider(_profileId).notifier).delAll(ruleIds);
   }
@@ -59,6 +82,14 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
       },
       itemBuilder:
           (context, ref, rule, index, isEditing, isSelected, onToggleSelected) {
+            final rules =
+                ref.watch(profileCustomRulesProvider(_profileId)).value ??
+                const <Rule>[];
+            final currentIndex = rules.indexWhere((item) => item.id == rule.id);
+            final lastMovableIndex = rules.lastIndexWhere(
+              (item) => item.ruleAction != RuleAction.MATCH,
+            );
+            final movable = rule.ruleAction != RuleAction.MATCH;
             return RuleItem(
               invalidMessageOf: (target) {
                 final issues = customRuleIssues(target, overwrite);
@@ -67,6 +98,16 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
               isEditing: isEditing,
               isSelected: isSelected,
               rule: rule,
+              showMoveControls: !isEditing,
+              onMoveUp: movable && currentIndex > 0
+                  ? () => _moveRule(rule.id, -1)
+                  : null,
+              onMoveDown:
+                  movable &&
+                      currentIndex >= 0 &&
+                      currentIndex < lastMovableIndex
+                  ? () => _moveRule(rule.id, 1)
+                  : null,
               onSelected: onToggleSelected,
               onEdit: (rule) {
                 _handleAddOrUpdate(rule: rule);
