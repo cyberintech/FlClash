@@ -56,10 +56,44 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
     final targets = _quickTargets();
     var target = _defaultQuickTarget(targets);
     final controller = TextEditingController();
-    List<VpnPolicyInstalledApp> apps = const [];
-    if (action == RuleAction.PROCESS_NAME && Platform.isWindows) {
+    List<({String label, String selector})> apps = const [];
+    if (action == RuleAction.PROCESS_NAME) {
       try {
-        apps = await loadWindowsInstalledApps();
+        if (Platform.isAndroid) {
+          final systemAction = ref.read(systemActionProvider.notifier);
+          var packages = await systemAction.getPackages();
+          if (packages.isEmpty &&
+              !await systemAction.isInstalledAppsPermissionGranted()) {
+            final granted =
+                await systemAction.requestInstalledAppsPermission();
+            if (granted) {
+              packages = await systemAction.getPackages();
+            }
+          }
+          apps =
+              packages
+                  .where((item) => !item.system && item.internet)
+                  .map(
+                    (item) => (
+                      label: item.label,
+                      selector: item.packageName,
+                    ),
+                  )
+                  .toList()
+                ..sort(
+                  (a, b) =>
+                      a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+                );
+        } else if (Platform.isWindows) {
+          apps = (await loadWindowsInstalledApps())
+              .map(
+                (item) => (
+                  label: item.label,
+                  selector: item.selector,
+                ),
+              )
+              .toList();
+        }
       } catch (_) {
         apps = const [];
       }
@@ -157,8 +191,12 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
                     const SizedBox(height: 12),
                     Text(
                       action == RuleAction.PROCESS_NAME
-                          ? 'Apps that bypass the system proxy require TUN. '
-                                'Rule changes take effect after core restart.'
+                          ? Platform.isWindows
+                                ? 'App routing uses TUN on Windows. '
+                                      'Add & apply will enable TUN and restart '
+                                      'the core.'
+                                : 'Android app routing uses the package name. '
+                                      'Add & apply restarts the core.'
                           : 'Rule changes take effect after core restart.',
                       style: Theme.of(dialogContext).textTheme.bodySmall,
                     ),
@@ -205,7 +243,22 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
     final currentRules =
         ref.read(profileCustomRulesProvider(_profileId)).value ??
         const <Rule>[];
-    await notifier.replaceAll([...currentRules, result]);
+    final sameSelector = currentRules.where(
+      (item) =>
+          item.ruleAction == result.ruleAction &&
+          item.realContent?.toLowerCase() == result.realContent?.toLowerCase(),
+    );
+    final remaining = List<Rule>.from(currentRules)
+      ..removeWhere((item) => sameSelector.contains(item));
+    final nextRules = action == RuleAction.PROCESS_NAME
+        ? [result, ...remaining]
+        : [...remaining, result];
+    await notifier.replaceAll(nextRules);
+    if (action == RuleAction.PROCESS_NAME && Platform.isWindows) {
+      ref
+          .read(patchClashConfigProvider.notifier)
+          .update((state) => state.copyWith.tun(enable: true));
+    }
     if (!mounted) {
       return;
     }
