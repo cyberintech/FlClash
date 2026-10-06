@@ -269,6 +269,17 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           .toList()
         ..sort();
 
+  Future<void> _applyRulesToRuntimeIfRunning() async {
+    final isCurrent = ref.read(currentProfileIdProvider) == widget.profileId;
+    if (!isCurrent || !ref.read(isStartProvider)) {
+      return;
+    }
+    final restarted = await ref.read(coreActionProvider.notifier).restartCore();
+    if (!restarted) {
+      throw StateError('Rules were saved, but the core restart did not complete');
+    }
+  }
+
   Future<void> _refreshFromServer({
     bool applyRules = true,
     List<String>? targets,
@@ -296,6 +307,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             .replaceAll(payload.rules);
       }
       await _applyRemoteState(settings, catalog, payload);
+      if (applyRules) {
+        await _applyRulesToRuntimeIfRunning();
+      }
     } catch (error) {
       if (mounted) {
         setState(() {
@@ -377,6 +391,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           .replaceAll(payload.rules);
       final catalog = _catalog ?? await vpnPolicyClient.fetchCatalog(settings);
       await _applyRemoteState(settings, catalog, payload);
+      await _applyRulesToRuntimeIfRunning();
     } catch (error) {
       if (mounted) {
         setState(() {
