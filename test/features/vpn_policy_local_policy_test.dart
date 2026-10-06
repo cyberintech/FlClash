@@ -18,6 +18,31 @@ void main() {
     ]);
   });
 
+  test('recovers selected apps from existing only-selected rules', () {
+    final selectors = inferLocalAppSelectorsFromRules(
+      mode: 'only_selected',
+      rules: [
+        Rule.parse('PROCESS-NAME,chrome.exe,NUE-VLESS'),
+        Rule.parse('PROCESS-NAME,Telegram.exe,NUE-VLESS'),
+        Rule.parse('MATCH,DIRECT'),
+      ],
+    );
+
+    expect(selectors, ['Telegram.exe', 'chrome.exe']);
+  });
+
+  test('recovers direct exceptions in exclude-selected mode', () {
+    final selectors = inferLocalAppSelectorsFromRules(
+      mode: 'exclude_selected',
+      rules: [
+        Rule.parse('PROCESS-NAME,max.exe,DIRECT'),
+        Rule.parse('MATCH,NUE-VLESS'),
+      ],
+    );
+
+    expect(selectors, ['max.exe']);
+  });
+
   test('Chrome-only policy keeps every other app on DIRECT', () {
     final rules = compileLocalVpnPolicy(
       mode: 'only_selected',
