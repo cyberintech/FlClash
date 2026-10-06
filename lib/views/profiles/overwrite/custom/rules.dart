@@ -92,28 +92,43 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
               (item) => item.ruleAction != RuleAction.MATCH,
             );
             final movable = rule.ruleAction != RuleAction.MATCH;
-            return RuleItem(
-              invalidMessageOf: (target) {
-                final issues = customRuleIssues(target, overwrite);
-                return issues.isEmpty ? null : issues.getMessage(context);
-              },
-              isEditing: isEditing,
-              isSelected: isSelected,
-              rule: rule,
-              showMoveControls: !isEditing,
-              onMoveUp: movable && currentIndex > 0
-                  ? () => _moveRule(rule.id, -1)
-                  : null,
-              onMoveDown:
-                  movable &&
-                      currentIndex >= 0 &&
-                      currentIndex < lastMovableIndex
-                  ? () => _moveRule(rule.id, 1)
-                  : null,
-              onSelected: onToggleSelected,
-              onEdit: (rule) {
-                _handleAddOrUpdate(rule: rule);
-              },
+            final canMoveUp = movable && currentIndex > 0;
+            final canMoveDown =
+                movable &&
+                currentIndex >= 0 &&
+                currentIndex < lastMovableIndex;
+            return Row(
+              children: [
+                Expanded(
+                  child: RuleItem(
+                    invalidMessageOf: (target) {
+                      final issues = customRuleIssues(target, overwrite);
+                      return issues.isEmpty ? null : issues.getMessage(context);
+                    },
+                    isEditing: isEditing,
+                    isSelected: isSelected,
+                    rule: rule,
+                    onSelected: onToggleSelected,
+                    onEdit: (rule) {
+                      _handleAddOrUpdate(rule: rule);
+                    },
+                  ),
+                ),
+                if (!isEditing) ...[
+                  const SizedBox(width: 6),
+                  IconButton(
+                    tooltip: 'Move up',
+                    onPressed: canMoveUp ? () => _moveRule(rule.id, -1) : null,
+                    icon: const Icon(Icons.keyboard_arrow_up),
+                  ),
+                  IconButton(
+                    tooltip: 'Move down',
+                    onPressed:
+                        canMoveDown ? () => _moveRule(rule.id, 1) : null,
+                    icon: const Icon(Icons.keyboard_arrow_down),
+                  ),
+                ],
+              ],
             );
           },
       onReorder: _handleReorder,
