@@ -162,17 +162,31 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _selectedTarget = settings.vpnTarget;
       _loading = false;
     });
+
+    final compatibilityTarget = await _ensureNueRealityCompatibilityOnOpen();
+    if (mounted && compatibilityTarget != null) {
+      setState(() {
+        _status = 'REALITY compatibility enabled for $compatibilityTarget';
+      });
+    }
+
     await _loadInstalledApps();
     if (settings.serviceUrl.isNotEmpty && settings.deviceKey.isNotEmpty) {
       await _refreshFromServer(applyRules: false);
     }
   }
 
-  Future<bool> _ensureNueRealityCompatibility(String target) async {
-    if (target != 'NUE-VLESS') {
-      return false;
+  Future<String?> _ensureNueRealityCompatibilityOnOpen() async {
+    final candidates = ['NUE-VLESS', 'NUE-VLESS-REALITY'];
+    for (final target in candidates) {
+      if (await _ensureNueRealityCompatibility(target)) {
+        return target;
+      }
     }
+    return null;
+  }
 
+  Future<bool> _ensureNueRealityCompatibility(String target) async {
     final profile = ref.read(profilesProvider).getProfile(widget.profileId);
     if (profile == null) {
       return false;
