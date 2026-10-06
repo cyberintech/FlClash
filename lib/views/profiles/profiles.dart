@@ -7,6 +7,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
 import 'package:fl_clash/views/profiles/overwrite/overwrite.dart';
+import 'package:fl_clash/views/profiles/overwrite/custom/vpn_policy.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:material_ui/material_ui.dart';
@@ -330,6 +331,10 @@ class ProfileItem extends ConsumerWidget {
     BaseNavigator.push(context, OverwriteView(profileId: id));
   }
 
+  void _handleSplitTunneling(BuildContext context) {
+    BaseNavigator.push(context, VpnPolicyView(profile.id));
+  }
+
   List<CommonPopupMenuItem> _menuItems(BuildContext context, WidgetRef ref) {
     final appLocalizations = context.appLocalizations;
     final isUrl = profile.type == ProfileType.url;
@@ -359,6 +364,13 @@ class ProfileItem extends ConsumerWidget {
             updateProfile(ref);
           },
         ),
+      CommonPopupMenuItem(
+        glyph: AppGlyphs.target,
+        label: 'Split tunneling',
+        onPressed: () {
+          _handleSplitTunneling(context);
+        },
+      ),
       CommonPopupMenuItem(
         glyph: AppGlyphs.moreCircle,
         label: appLocalizations.more,
@@ -422,40 +434,60 @@ class ProfileItem extends ConsumerWidget {
         padding: const EdgeInsets.only(left: 16, right: 6),
         trailing: SizedBox(
           height: 40,
-          width: 40,
-          child: Consumer(
-            builder: (context, ref, _) {
-              final isUpdating = ref.watch(
-                isUpdatingProvider(profile.updatingKey),
-              );
-              return FadeThroughBox(
-                alignment: Alignment.center,
-                child: isUpdating
-                    ? const Padding(
-                        key: ValueKey('loading'),
-                        padding: EdgeInsets.all(8),
-                        child: CommonCircleLoading(),
-                      )
-                    : CommonPopupBox(
-                        key: const ValueKey('menu'),
-                        popupBuilder: (_) =>
-                            CommonPopupMenu(items: _menuItems(context, ref)),
-                        targetBuilder: (open) {
-                          return IconButton(
-                            style: IconButton.styleFrom(
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.standard,
+          width: 84,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 40,
+                child: IconButton(
+                  style: IconButton.styleFrom(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.standard,
+                  ),
+                  tooltip: 'Split tunneling',
+                  onPressed: () => _handleSplitTunneling(context),
+                  icon: const GlyphIcon(AppGlyphs.target),
+                ),
+              ),
+              SizedBox(
+                width: 40,
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final isUpdating = ref.watch(
+                      isUpdatingProvider(profile.updatingKey),
+                    );
+                    return FadeThroughBox(
+                      alignment: Alignment.center,
+                      child: isUpdating
+                          ? const Padding(
+                              key: ValueKey('loading'),
+                              padding: EdgeInsets.all(8),
+                              child: CommonCircleLoading(),
+                            )
+                          : CommonPopupBox(
+                              key: const ValueKey('menu'),
+                              popupBuilder: (_) => CommonPopupMenu(
+                                items: _menuItems(context, ref),
+                              ),
+                              targetBuilder: (open) {
+                                return IconButton(
+                                  style: IconButton.styleFrom(
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.standard,
+                                  ),
+                                  tooltip: context.appLocalizations.more,
+                                  onPressed: open,
+                                  icon: const GlyphIcon(AppGlyphs.more),
+                                );
+                              },
                             ),
-                            tooltip: context.appLocalizations.more,
-                            onPressed: () {
-                              open();
-                            },
-                            icon: const GlyphIcon(AppGlyphs.more),
-                          );
-                        },
-                      ),
-              );
-            },
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
         title: _ProfileCardTitle(
