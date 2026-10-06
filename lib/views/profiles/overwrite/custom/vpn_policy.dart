@@ -625,27 +625,27 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     return semantic != null && _selectedApps.contains(semantic);
   }
 
+  String _labelForAppSelector(String selector) {
+    if (Platform.isAndroid) {
+      for (final item in _androidPackages) {
+        if (item.packageName == selector) {
+          return item.label;
+        }
+      }
+    } else if (Platform.isWindows) {
+      for (final item in _windowsApps) {
+        if (item.selector == selector) {
+          return item.label;
+        }
+      }
+    }
+    return selector;
+  }
+
   List<({String selector, String label})> _selectedAppEntries() {
     return [
       for (final selector in _localAppSelectors())
-        (
-          selector: selector,
-          label: switch (true) {
-            _ when Platform.isAndroid =>
-              _androidPackages
-                      .where((item) => item.packageName == selector)
-                      .firstOrNull
-                      ?.label ??
-                  selector,
-            _ when Platform.isWindows =>
-              _windowsApps
-                      .where((item) => item.selector == selector)
-                      .firstOrNull
-                      ?.label ??
-                  selector,
-            _ => selector,
-          },
-        ),
+        (selector: selector, label: _labelForAppSelector(selector)),
     ];
   }
 
