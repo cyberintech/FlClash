@@ -459,8 +459,37 @@ class ProfileCustomRules extends _$ProfileCustomRules
         order: order,
       );
 
+  List<Rule> _normalizedOrder(Iterable<Rule> rules) {
+    final regular = <Rule>[];
+    final match = <Rule>[];
+    for (final rule in rules) {
+      if (rule.ruleAction == RuleAction.MATCH) {
+        match.add(rule);
+      } else {
+        regular.add(rule);
+      }
+    }
+    return [...regular, ...match];
+  }
+
+  @override
+  void put(Rule rule) {
+    final next = List<Rule>.from(value);
+    final index = next.indexWhere((item) => item.id == rule.id);
+    if (index == -1) {
+      next.add(rule);
+    } else {
+      next[index] = rule;
+    }
+    final ordered = _normalizedOrder(next);
+    optimistic(
+      ordered,
+      () => database.rulesDao.setProfileCustomRules(profileId, ordered),
+    );
+  }
+
   Future<void> replaceAll(List<Rule> rules) {
-    final next = List<Rule>.from(rules);
+    final next = _normalizedOrder(rules);
     return optimisticAsync(
       next,
       () => database.rulesDao.setProfileCustomRules(profileId, next),
