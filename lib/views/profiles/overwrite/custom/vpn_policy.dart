@@ -138,7 +138,24 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   }
 
   Future<void> _load() async {
-    final settings = await vpnPolicySettingsStore.load(widget.profileId);
+    var settings = await vpnPolicySettingsStore.load(widget.profileId);
+    final rules = await ref.read(
+      profileCustomRulesProvider(widget.profileId).future,
+    );
+    final recoveredSelectors = inferLocalAppSelectorsFromRules(
+      mode: settings.localMode,
+      rules: rules,
+    );
+    final mergedSelectors = {
+      ...settings.localAppSelectors,
+      ...recoveredSelectors,
+    }.toList()
+      ..sort();
+    if (mergedSelectors.length != settings.localAppSelectors.length ||
+        !mergedSelectors.every(settings.localAppSelectors.contains)) {
+      settings = settings.copyWith(localAppSelectors: mergedSelectors);
+      await vpnPolicySettingsStore.save(widget.profileId, settings);
+    }
     if (!mounted) {
       return;
     }
@@ -551,7 +568,14 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         apps: _selectedApps.toList()..sort(),
         services: _selectedServices.toList()..sort(),
         customDomains: List<String>.from(_customDomains),
-        customAppSelectors: _selectedCustomApps.toList()..sort(),
+        customAppSelectors:
+            _selectedCustomApps
+                .where((selector) {
+                  final semantic = _catalog?.selectorToAppKey[selector];
+                  return semantic == null || !_selectedApps.contains(semantic);
+                })
+                .toList()
+              ..sort(),
       );
       await _ensureCustomOverwrite();
       await ref
@@ -579,21 +603,87 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   void _toggleInstalledApp(String selector, bool selected) {
     final semantic = _catalog?.selectorToAppKey[selector];
     setState(() {
-      if (semantic != null) {
-        selected ? _selectedApps.add(semantic) : _selectedApps.remove(semantic);
+      if (selected) {
+        _selectedCustomApps.add(selector);
+        if (semantic != null) {
+          _selectedApps.add(semantic);
+        }
       } else {
-        selected
-            ? _selectedCustomApps.add(selector)
-            : _selectedCustomApps.remove(selector);
+        _selectedCustomApps.remove(selector);
+        if (semantic != null) {
+          _selectedApps.remove(semantic);
+        }
       }
     });
   }
 
   bool _isInstalledAppSelected(String selector) {
+    if (_selectedCustomApps.contains(selector)) {
+      return true;
+    }
     final semantic = _catalog?.selectorToAppKey[selector];
-    return semantic != null
-        ? _selectedApps.contains(semantic)
-        : _selectedCustomApps.contains(selector);
+    return semantic != null && _selectedApps.contains(semantic);
+  }
+
+  List<({String selector, String label})> _selectedAppEntries() {
+    return [
+      for (final selector in _localAppSelectors())
+        (
+          selector: selector,
+          label: switch (true) {
+            _ when Platform.isAndroid =>
+              _androidPackages
+                      .where((item) => item.packageName == selector)
+                      .firstOrNull
+                      ?.label ??
+                  selector,
+            _ when Platform.isWindows =>
+              _windowsApps
+                      .where((item) => item.selector == selector)
+                      .firstOrNull
+                      ?.label ??
+                  selector,
+            _ => selector,
+          },
+        ),
+    ];
+  }
+
+  Widget _selectedAppsSummary() {
+    final selected = _selectedAppEntries();
+    if (selected.isEmpty) {
+      return Text(
+        'No applications selected.',
+        style: context.textTheme.bodyMedium?.copyWith(
+          color: context.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Selected apps',
+          style: context.textTheme.labelLarge?.copyWith(
+            color: context.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final app in selected)
+              InputChip(
+                label: Text(app.label),
+                tooltip: app.selector,
+                onDeleted: () => _toggleInstalledApp(app.selector, false),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 
   String _normalizeDomain(String value) {
@@ -830,18 +920,25 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               color: context.colorScheme.onSurface,
             ),
       child: !_appsExpanded
-          ? Text(
-              selectedCount == 0
-                  ? 'Tap to choose applications.'
-                  : '$selectedCount app selector(s) selected. Tap to change.',
-              style: context.textTheme.bodyMedium?.copyWith(
-                color: context.colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _selectedAppsSummary(),
+                const SizedBox(height: 10),
+                Text(
+                  'Tap the header to choose more applications.',
+                  style: context.textTheme.bodyMedium?.copyWith(
+                    color: context.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             )
           : Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _selectedAppsSummary(),
+          const SizedBox(height: 12),
           TextField(
             controller: _appSearchController,
             autofocus: Platform.isWindows,
