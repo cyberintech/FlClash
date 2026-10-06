@@ -814,39 +814,30 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       title: selectedCount == 0
           ? context.appLocalizations.app
           : '${context.appLocalizations.app} · $selectedCount selected',
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_appsLoading)
-            const SizedBox.square(
+      onHeaderTap: () {
+        setState(() {
+          _appsExpanded = !_appsExpanded;
+        });
+      },
+      trailing: _appsLoading
+          ? const SizedBox.square(
               dimension: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          else if (_appsExpanded)
-            IconButton(
-              tooltip: 'Refresh installed apps',
-              onPressed: _loadInstalledApps,
-              icon: const Icon(Icons.refresh),
-            ),
-          IconButton(
-            tooltip: _appsExpanded ? 'Collapse apps' : 'Expand apps',
-            onPressed: () {
-              setState(() {
-                _appsExpanded = !_appsExpanded;
-              });
-            },
-            icon: Icon(
+          : Icon(
               _appsExpanded ? Icons.expand_less : Icons.expand_more,
+              size: 30,
+              color: context.colorScheme.onSurface,
             ),
-          ),
-        ],
-      ),
       child: !_appsExpanded
           ? Text(
               selectedCount == 0
-                  ? 'Collapsed. Expand only when you need to choose apps.'
-                  : '$selectedCount app selector(s) selected.',
-              style: context.textTheme.bodySmall,
+                  ? 'Tap to choose applications.'
+                  : '$selectedCount app selector(s) selected. Tap to change.',
+              style: context.textTheme.bodyMedium?.copyWith(
+                color: context.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
             )
           : Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -855,9 +846,14 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             controller: _appSearchController,
             autofocus: Platform.isWindows,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
+            decoration: InputDecoration(
+              prefixIcon: const Icon(Icons.search),
               hintText: 'Search apps by name, .exe or package',
+              suffixIcon: IconButton(
+                tooltip: 'Refresh installed apps',
+                onPressed: _appsLoading ? null : _loadInstalledApps,
+                icon: const Icon(Icons.refresh),
+              ),
             ),
           ),
           if (Platform.isAndroid && !_installedAppsPermissionGranted) ...[
@@ -1062,8 +1058,14 @@ class _Section extends StatelessWidget {
   final String title;
   final Widget child;
   final Widget? trailing;
+  final VoidCallback? onHeaderTap;
 
-  const _Section({required this.title, required this.child, this.trailing});
+  const _Section({
+    required this.title,
+    required this.child,
+    this.trailing,
+    this.onHeaderTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1087,19 +1089,26 @@ class _Section extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: context.textTheme.titleMedium?.copyWith(
-                      color: titleColor,
-                      fontWeight: FontWeight.w700,
+            InkWell(
+              onTap: onHeaderTap,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: context.textTheme.titleMedium?.copyWith(
+                          color: titleColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
-                  ),
+                    ?trailing,
+                  ],
                 ),
-                ?trailing,
-              ],
+              ),
             ),
             const SizedBox(height: 8),
             child,
