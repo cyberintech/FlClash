@@ -27,6 +27,9 @@ class VpnPolicyView extends ConsumerStatefulWidget {
 }
 
 class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
+  static const _defaultPolicyServiceUrl =
+      'https://cyberintellect.tech/vpn-policy';
+
   final _urlController = TextEditingController();
   final _keyController = TextEditingController();
   final _appSearchController = TextEditingController();
@@ -143,6 +146,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
 
   Future<void> _load() async {
     var settings = await vpnPolicySettingsStore.load(widget.profileId);
+    if (settings.serviceUrl.trim().isEmpty) {
+      settings = settings.copyWith(serviceUrl: _defaultPolicyServiceUrl);
+      await vpnPolicySettingsStore.save(widget.profileId, settings);
+    }
     final rules = await ref.read(
       profileCustomRulesProvider(widget.profileId).future,
     );
@@ -814,15 +821,17 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             TextFormField(
               controller: _urlController,
               keyboardType: TextInputType.url,
+              onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 labelText: appLocalizations.url,
-                hintText: 'https://policy.example.com',
+                hintText: _defaultPolicyServiceUrl,
               ),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _keyController,
               obscureText: true,
+              onChanged: (_) => setState(() {}),
               decoration: InputDecoration(labelText: appLocalizations.key),
             ),
             const SizedBox(height: 12),
