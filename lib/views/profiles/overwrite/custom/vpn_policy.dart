@@ -157,9 +157,6 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     });
 
     await _loadInstalledApps();
-    if (settings.serviceUrl.isNotEmpty && settings.deviceKey.isNotEmpty) {
-      await _refreshFromServer(applyRules: false);
-    }
   }
 
   Future<void> _loadInstalledApps() async {
