@@ -332,6 +332,83 @@ class SetupAction extends _$SetupAction {
     }
   }
 
+  static const _vpnPolicyNueTargets = {
+    'NUE-VLESS',
+    'NUE-VLESS-REALITY',
+  };
+
+  bool _isVpnPolicyNueRealityProxy(Map<String, dynamic> proxy) {
+    final name = proxy['name']?.toString();
+    final type = proxy['type']?.toString().toLowerCase();
+    return _vpnPolicyNueTargets.contains(name) &&
+        type == 'vless' &&
+        proxy['reality-opts'] is Map;
+  }
+
+  Map<String, dynamic> _applyVpnPolicyNueRealityCompatibility(
+    Map<String, dynamic> source,
+  ) {
+    final rawProxies = source['proxies'];
+    if (rawProxies is! List) {
+      return source;
+    }
+
+    var changed = false;
+    final nextProxies = <dynamic>[];
+    for (final rawProxy in rawProxies) {
+      if (rawProxy is! Map) {
+        nextProxies.add(rawProxy);
+        continue;
+      }
+      final proxy = Map<String, dynamic>.from(rawProxy);
+      if (!_isVpnPolicyNueRealityProxy(proxy)) {
+        nextProxies.add(rawProxy);
+        continue;
+      }
+      final reality = Map<String, dynamic>.from(
+        proxy['reality-opts'] as Map,
+      );
+      if (reality['support-x25519mlkem768'] == true) {
+        nextProxies.add(rawProxy);
+        continue;
+      }
+      reality['support-x25519mlkem768'] = true;
+      proxy['reality-opts'] = reality;
+      nextProxies.add(proxy);
+      changed = true;
+    }
+
+    if (!changed) {
+      return source;
+    }
+    commonPrint.log(
+      'VPN Policy: enabled X25519MLKEM768 for NUE REALITY proxy',
+    );
+    return {
+      ...source,
+      'proxies': nextProxies,
+    };
+  }
+
+  CustomProxy _applyVpnPolicyNueRealityCompatibilityToCustomProxy(
+    CustomProxy customProxy,
+  ) {
+    final proxy = Map<String, dynamic>.from(customProxy.definition);
+    if (!_isVpnPolicyNueRealityProxy(proxy)) {
+      return customProxy;
+    }
+    final reality = Map<String, dynamic>.from(proxy['reality-opts'] as Map);
+    if (reality['support-x25519mlkem768'] == true) {
+      return customProxy;
+    }
+    reality['support-x25519mlkem768'] = true;
+    proxy['reality-opts'] = reality;
+    commonPrint.log(
+      'VPN Policy: enabled X25519MLKEM768 for custom NUE REALITY proxy',
+    );
+    return customProxy.copyWith(definition: proxy);
+  }
+
   Future<({String yaml, String md5})> getProfile({
     required SetupState setupState,
     required PatchClashConfig patchConfig,
@@ -363,7 +440,11 @@ class SetupAction extends _$SetupAction {
     } else if (setupState.overwriteType == OverwriteType.standard) {
       addedRules.addAll(setupState.addedRules);
     } else {
-      proxies.addAll(setupState.customProxies);
+      proxies.addAll(
+        setupState.customProxies.map(
+          _applyVpnPolicyNueRealityCompatibilityToCustomProxy,
+        ),
+      );
       proxyGroups.addAll(setupState.proxyGroups);
       rules.addAll(setupState.rules);
     }
@@ -374,6 +455,7 @@ class SetupAction extends _$SetupAction {
     if (scriptContent?.isNotEmpty == true) {
       rawConfig = await handleEvaluate(scriptContent!, rawConfig);
     }
+    rawConfig = _applyVpnPolicyNueRealityCompatibility(rawConfig);
     final directory = await appPath.profilesPath;
     final injected = await _resolveInjectedProviders(
       setupState,
