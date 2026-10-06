@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/features/vpn_policy/installed_apps.dart';
+import 'package:fl_clash/features/vpn_policy/local_policy.dart';
 import 'package:fl_clash/features/vpn_policy/policy_catalog.dart';
 import 'package:fl_clash/features/vpn_policy/policy_client.dart';
 import 'package:fl_clash/features/vpn_policy/policy_payload.dart';
@@ -144,9 +145,15 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     setState(() {
       _settings = settings;
       _selectedTarget = settings.vpnTarget;
+      _mode = settings.localMode;
+      _selectedCustomApps
+        ..clear()
+        ..addAll(settings.localAppSelectors);
+      _customDomains
+        ..clear()
+        ..addAll(settings.localDomains);
       _loading = false;
     });
-
 
     await _loadInstalledApps();
     if (settings.serviceUrl.isNotEmpty && settings.deviceKey.isNotEmpty) {
@@ -280,6 +287,109 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     }
   }
 
+  List<String> _localAppSelectors() {
+    final selectors = <String>{..._selectedCustomApps};
+    final catalog = _catalog;
+    if (catalog != null) {
+      for (final key in _selectedApps) {
+        for (final app in catalog.apps) {
+          if (app.key == key) {
+            selectors.addAll(app.selectors);
+            break;
+          }
+        }
+      }
+    }
+    return selectors.toList()..sort();
+  }
+
+  List<String> _localDomains() {
+    final domains = <String>{..._customDomains};
+    final catalog = _catalog;
+    if (catalog != null) {
+      for (final key in _selectedServices) {
+        for (final service in catalog.services) {
+          if (service.key == key) {
+            domains.addAll(service.domains);
+            break;
+          }
+        }
+      }
+    }
+    return domains.toList()..sort();
+  }
+
+  Future<void> _saveLocalAndApply(List<String> targets) async {
+    final target = _effectiveTarget(targets);
+    if (target == null) {
+      setState(() {
+        _status = context.appLocalizations.emptyTip(
+          context.appLocalizations.ruleTarget,
+        );
+      });
+      return;
+    }
+
+    final appSelectors = _localAppSelectors();
+    final domains = _localDomains();
+    final rules = compileLocalVpnPolicy(
+      mode: _mode,
+      vpnTarget: target,
+      appSelectors: appSelectors,
+      domains: domains,
+    );
+
+    setState(() {
+      _busy = true;
+      _status = null;
+    });
+    try {
+      await ref
+          .read(profileCustomRulesProvider(widget.profileId).notifier)
+          .replaceAll(rules);
+      if (appSelectors.isNotEmpty) {
+        ref.read(patchClashConfigProvider.notifier).update(
+          (state) => state.copyWith(
+            findProcessMode: FindProcessMode.always,
+            tun: Platform.isWindows
+                ? state.tun.copyWith(enable: true)
+                : state.tun,
+          ),
+        );
+      }
+      final next = _settings.copyWith(
+        serviceUrl: _urlController.text.trim(),
+        deviceKey: _keyController.text.trim(),
+        vpnTarget: target,
+        localMode: _mode,
+        localAppSelectors: appSelectors,
+        localDomains: domains,
+      );
+      await vpnPolicySettingsStore.save(widget.profileId, next);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = next;
+        _selectedTarget = target;
+        _status = 'Applied locally: ${rules.length} rules';
+      });
+      await _applyRulesToRuntimeIfRunning();
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _status = 'Apply failed: ${compactError(error)}';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _refreshFromServer({
     bool applyRules = true,
     List<String>? targets,
@@ -366,6 +476,13 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   }
 
   Future<void> _saveAndApply(List<String> targets) async {
+    final url = _urlController.text.trim();
+    final key = _keyController.text.trim();
+    if (url.isEmpty && key.isEmpty) {
+      await _saveLocalAndApply(targets);
+      return;
+    }
+
     final settings = _connectionSettings(targets);
     if (settings == null) {
       return;
@@ -453,7 +570,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     final selectedTarget = _effectiveTarget(targets);
     final status = _status;
     final isError = status?.startsWith('Sync failed:') == true;
-    final isSuccess = status?.startsWith('Synced:') == true;
+    final isSuccess =
+        status?.startsWith('Synced:') == true ||
+        status?.startsWith('Applied locally:') == true;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final statusBackground = isError
         ? (dark ? const Color(0xFF4A1D24) : const Color(0xFFFFECEE))
@@ -820,15 +939,13 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               _domainsSection(),
               const SizedBox(height: 12),
               FilledButton(
-                onPressed: _busy || _catalog == null
-                    ? null
-                    : () => _saveAndApply(targets),
+                onPressed: _busy ? null : () => _saveAndApply(targets),
                 child: _busy
                     ? const SizedBox.square(
                         dimension: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(context.appLocalizations.save),
+                    : const Text('Apply rules'),
               ),
               if (_payload != null && _payload!.revision.isNotEmpty) ...[
                 const SizedBox(height: 6),
