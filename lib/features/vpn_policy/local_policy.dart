@@ -36,6 +36,37 @@ String normalizeLocalPolicyDomain(String value) {
   return domain;
 }
 
+List<String> inferLocalAppSelectorsFromRules({
+  required String mode,
+  required Iterable<Rule> rules,
+}) {
+  if (mode == 'all_vpn') {
+    return const [];
+  }
+  final selectors = <String>{};
+  for (final rule in rules) {
+    if (rule.ruleAction != RuleAction.PROCESS_NAME) {
+      continue;
+    }
+    final selector = rule.realContent?.trim();
+    final target = rule.realTarget?.trim().toUpperCase();
+    if (selector == null || selector.isEmpty || target == null) {
+      continue;
+    }
+    final selected = switch (mode) {
+      'exclude_selected' => target == RuleTarget.DIRECT.value,
+      _ =>
+        target != RuleTarget.DIRECT.value &&
+        target != RuleTarget.REJECT.value &&
+        target != RuleTarget.REJECT_DROP.value,
+    };
+    if (selected) {
+      selectors.add(selector);
+    }
+  }
+  return selectors.toList()..sort();
+}
+
 List<Rule> compileLocalVpnPolicy({
   required String mode,
   required String vpnTarget,
