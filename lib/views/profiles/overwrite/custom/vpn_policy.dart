@@ -49,6 +49,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   bool _loading = true;
   bool _busy = false;
   bool _appsLoading = false;
+  bool _appsExpanded = false;
   bool _installedAppsPermissionGranted = true;
   late final ErrorWidgetBuilder _previousErrorWidgetBuilder;
 
@@ -178,7 +179,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         }
         setState(() {
           _androidPackages =
-              packages.where((item) => !item.system && item.internet).toList()
+              packages.where((item) => item.internet).toList()
                 ..sort(
                   (a, b) =>
                       a.label.toLowerCase().compareTo(b.label.toLowerCase()),
@@ -807,18 +808,47 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     final hasNativeApps = Platform.isAndroid || Platform.isWindows;
     final listEmpty = Platform.isAndroid ? android.isEmpty : windows.isEmpty;
 
+    final selectedCount = _localAppSelectors().length;
+
     return _Section(
-      title: context.appLocalizations.app,
-      trailing: _appsLoading
-          ? const SizedBox.square(
+      title: selectedCount == 0
+          ? context.appLocalizations.app
+          : '${context.appLocalizations.app} · $selectedCount selected',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_appsLoading)
+            const SizedBox.square(
               dimension: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : IconButton(
+          else if (_appsExpanded)
+            IconButton(
+              tooltip: 'Refresh installed apps',
               onPressed: _loadInstalledApps,
               icon: const Icon(Icons.refresh),
             ),
-      child: Column(
+          IconButton(
+            tooltip: _appsExpanded ? 'Collapse apps' : 'Expand apps',
+            onPressed: () {
+              setState(() {
+                _appsExpanded = !_appsExpanded;
+              });
+            },
+            icon: Icon(
+              _appsExpanded ? Icons.expand_less : Icons.expand_more,
+            ),
+          ),
+        ],
+      ),
+      child: !_appsExpanded
+          ? Text(
+              selectedCount == 0
+                  ? 'Collapsed. Expand only when you need to choose apps.'
+                  : '$selectedCount app selector(s) selected.',
+              style: context.textTheme.bodySmall,
+            )
+          : Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           TextField(
@@ -985,8 +1015,8 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             ).copyWith(top: context.contentTopPadding),
             children: [
               _modeSection(),
-              _appsSection(),
               _domainsSection(),
+              _appsSection(),
               if (_catalog != null) _servicesSection(),
               const SizedBox(height: 4),
               FilledButton(
