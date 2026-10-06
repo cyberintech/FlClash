@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:fl_clash/common/common.dart';
 
 String _vpnPolicySettingsKey(int profileId) => 'vpn_policy_settings_$profileId';
+const _vpnPolicyConnectionKey = 'vpn_policy_connection_v1';
 
 class VpnPolicySettings {
   final String serviceUrl;
@@ -77,27 +78,82 @@ class VpnPolicySettings {
 }
 
 class VpnPolicySettingsStore {
-  Future<VpnPolicySettings> load(int profileId) async {
-    final shared = await preferences.sharedPreferencesCompleter.future;
-    final raw = shared?.getString(_vpnPolicySettingsKey(profileId));
+  Map<String, String> _decodeConnection(String? raw) {
     if (raw == null || raw.isEmpty) {
-      return const VpnPolicySettings();
+      return const {'serviceUrl': '', 'deviceKey': ''};
     }
     try {
-      return VpnPolicySettings.fromJson(
-        Map<String, dynamic>.from(json.decode(raw) as Map),
-      );
+      final jsonValue = Map<String, dynamic>.from(json.decode(raw) as Map);
+      return {
+        'serviceUrl': jsonValue['serviceUrl']?.toString() ?? '',
+        'deviceKey': jsonValue['deviceKey']?.toString() ?? '',
+      };
     } catch (_) {
-      return const VpnPolicySettings();
+      return const {'serviceUrl': '', 'deviceKey': ''};
     }
+  }
+
+  Future<void> saveConnection({
+    required String serviceUrl,
+    required String deviceKey,
+  }) async {
+    final shared = await preferences.sharedPreferencesCompleter.future;
+    await shared?.setString(
+      _vpnPolicyConnectionKey,
+      json.encode({
+        'serviceUrl': serviceUrl.trim(),
+        'deviceKey': deviceKey.trim(),
+      }),
+    );
+  }
+
+  Future<VpnPolicySettings> load(int profileId) async {
+    final shared = await preferences.sharedPreferencesCompleter.future;
+    VpnPolicySettings profile = const VpnPolicySettings();
+    final raw = shared?.getString(_vpnPolicySettingsKey(profileId));
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        profile = VpnPolicySettings.fromJson(
+          Map<String, dynamic>.from(json.decode(raw) as Map),
+        );
+      } catch (_) {}
+    }
+
+    final connection = _decodeConnection(
+      shared?.getString(_vpnPolicyConnectionKey),
+    );
+    var serviceUrl = connection['serviceUrl'] ?? '';
+    var deviceKey = connection['deviceKey'] ?? '';
+
+    final needsMigration =
+        (serviceUrl.isEmpty && profile.serviceUrl.isNotEmpty) ||
+        (deviceKey.isEmpty && profile.deviceKey.isNotEmpty);
+    if (serviceUrl.isEmpty) {
+      serviceUrl = profile.serviceUrl;
+    }
+    if (deviceKey.isEmpty) {
+      deviceKey = profile.deviceKey;
+    }
+    if (needsMigration) {
+      await saveConnection(serviceUrl: serviceUrl, deviceKey: deviceKey);
+    }
+
+    return profile.copyWith(serviceUrl: serviceUrl, deviceKey: deviceKey);
   }
 
   Future<void> save(int profileId, VpnPolicySettings settings) async {
     final shared = await preferences.sharedPreferencesCompleter.future;
-    await shared?.setString(
-      _vpnPolicySettingsKey(profileId),
-      json.encode(settings.toJson()),
-    );
+    await Future.wait([
+      shared?.setString(
+            _vpnPolicySettingsKey(profileId),
+            json.encode(settings.toJson()),
+          ) ??
+          Future.value(true),
+      saveConnection(
+        serviceUrl: settings.serviceUrl,
+        deviceKey: settings.deviceKey,
+      ),
+    ]);
   }
 }
 
