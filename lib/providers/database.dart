@@ -459,6 +459,22 @@ class ProfileCustomRules extends _$ProfileCustomRules
         order: order,
       );
 
+  @override
+  void order(int oldIndex, int newIndex) {
+    if (oldIndex < 0 ||
+        newIndex < 0 ||
+        oldIndex >= value.length ||
+        newIndex >= value.length ||
+        oldIndex == newIndex) {
+      return;
+    }
+    final next = _normalizedOrder(value.copyAndReorder(oldIndex, newIndex));
+    optimistic(
+      next,
+      () => database.rulesDao.setProfileCustomRules(profileId, next),
+    );
+  }
+
   List<Rule> _normalizedOrder(Iterable<Rule> rules) {
     final regular = <Rule>[];
     final match = <Rule>[];
