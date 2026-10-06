@@ -1051,6 +1051,57 @@ void main() {
     });
 
     test(
+      'NUE VLESS runtime enables XUDP for UDP-heavy traffic',
+      () async {
+        final profile = Profile.normal(label: 'nue');
+        final core = _MockCoreHandlerInterface();
+        when(() => core.getConfig(any())).thenAnswer(
+          (_) async => {
+            'proxies': [
+              {
+                'name': 'NUE-VLESS',
+                'type': 'vless',
+                'server': 'example.com',
+                'port': 443,
+                'uuid': '00000000-0000-0000-0000-000000000000',
+                'network': 'tcp',
+                'tls': true,
+                'flow': 'xtls-rprx-vision',
+                'reality-opts': {
+                  'public-key': 'test',
+                  'short-id': 'abcd',
+                  'support-x25519mlkem768': true,
+                },
+              },
+            ],
+          },
+        );
+        final setupState = nullProfileSetupState.copyWith(
+          profileId: profile.id,
+        );
+        final scoped = ProviderContainer(
+          overrides: [
+            coreHandlerProvider.overrideWithValue(CoreController.scoped(core)),
+            setupActionProvider.overrideWith(SetupAction.new),
+          ],
+        );
+        addTearDown(scoped.dispose);
+
+        final res = await scoped
+            .read(setupActionProvider.notifier)
+            .getProfile(
+              setupState: setupState,
+              patchConfig: const PatchClashConfig(),
+            );
+        final config = loadYaml(res.yaml) as YamlMap;
+        final proxy = (config['proxies'] as YamlList).first as YamlMap;
+
+        expect(proxy['packet-encoding'], 'xudp');
+        expect(proxy['reality-opts']['support-x25519mlkem768'], isTrue);
+      },
+    );
+
+    test(
       'process rules force process lookup in the generated config',
       () async {
         final profile = Profile.normal(label: 'process-routing');
