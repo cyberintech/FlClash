@@ -173,7 +173,7 @@ class _CustomRulesViewState extends ConsumerState<CustomRulesView> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: target,
+                      initialValue: target,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Route via'),
                       items: [
