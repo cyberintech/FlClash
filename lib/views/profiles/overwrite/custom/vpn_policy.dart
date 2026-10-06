@@ -287,6 +287,28 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     }
   }
 
+  void _configureProcessRouting(Iterable<Rule> rules) {
+    final hasProcessRules = rules.any(
+      (rule) => const {
+        RuleAction.PROCESS_NAME,
+        RuleAction.PROCESS_NAME_REGEX,
+        RuleAction.PROCESS_NAME_WILDCARD,
+        RuleAction.PROCESS_PATH,
+        RuleAction.PROCESS_PATH_REGEX,
+        RuleAction.PROCESS_PATH_WILDCARD,
+      }.contains(rule.ruleAction),
+    );
+    if (!hasProcessRules) {
+      return;
+    }
+    ref.read(patchClashConfigProvider.notifier).update(
+      (state) => state.copyWith(
+        findProcessMode: FindProcessMode.always,
+        tun: Platform.isWindows ? state.tun.copyWith(enable: true) : state.tun,
+      ),
+    );
+  }
+
   List<String> _localAppSelectors() {
     final selectors = <String>{..._selectedCustomApps};
     final catalog = _catalog;
@@ -347,16 +369,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       await ref
           .read(profileCustomRulesProvider(widget.profileId).notifier)
           .replaceAll(rules);
-      if (appSelectors.isNotEmpty) {
-        ref.read(patchClashConfigProvider.notifier).update(
-          (state) => state.copyWith(
-            findProcessMode: FindProcessMode.always,
-            tun: Platform.isWindows
-                ? state.tun.copyWith(enable: true)
-                : state.tun,
-          ),
-        );
-      }
+      _configureProcessRouting(rules);
       final next = _settings.copyWith(
         serviceUrl: _urlController.text.trim(),
         deviceKey: _keyController.text.trim(),
@@ -415,6 +428,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         await ref
             .read(profileCustomRulesProvider(widget.profileId).notifier)
             .replaceAll(payload.rules);
+        _configureProcessRouting(payload.rules);
       }
       await _applyRemoteState(settings, catalog, payload);
       if (applyRules) {
@@ -499,6 +513,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       await ref
           .read(profileCustomRulesProvider(widget.profileId).notifier)
           .replaceAll(payload.rules);
+      _configureProcessRouting(payload.rules);
       final catalog = _catalog ?? await vpnPolicyClient.fetchCatalog(settings);
       await _applyRemoteState(settings, catalog, payload);
       await _applyRulesToRuntimeIfRunning();
