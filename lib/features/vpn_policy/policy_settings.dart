@@ -10,6 +10,9 @@ class VpnPolicySettings {
   final String vpnTarget;
   final String lastRevision;
   final String lastPolicyName;
+  final String localMode;
+  final List<String> localAppSelectors;
+  final List<String> localDomains;
 
   const VpnPolicySettings({
     this.serviceUrl = '',
@@ -17,6 +20,9 @@ class VpnPolicySettings {
     this.vpnTarget = '',
     this.lastRevision = '',
     this.lastPolicyName = '',
+    this.localMode = 'only_selected',
+    this.localAppSelectors = const [],
+    this.localDomains = const [],
   });
 
   factory VpnPolicySettings.fromJson(Map<String, dynamic> json) {
@@ -26,6 +32,13 @@ class VpnPolicySettings {
       vpnTarget: json['vpnTarget']?.toString() ?? '',
       lastRevision: json['lastRevision']?.toString() ?? '',
       lastPolicyName: json['lastPolicyName']?.toString() ?? '',
+      localMode: json['localMode']?.toString() ?? 'only_selected',
+      localAppSelectors: (json['localAppSelectors'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
+      localDomains: (json['localDomains'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
     );
   }
 
@@ -35,6 +48,9 @@ class VpnPolicySettings {
     String? vpnTarget,
     String? lastRevision,
     String? lastPolicyName,
+    String? localMode,
+    List<String>? localAppSelectors,
+    List<String>? localDomains,
   }) {
     return VpnPolicySettings(
       serviceUrl: serviceUrl ?? this.serviceUrl,
@@ -42,6 +58,9 @@ class VpnPolicySettings {
       vpnTarget: vpnTarget ?? this.vpnTarget,
       lastRevision: lastRevision ?? this.lastRevision,
       lastPolicyName: lastPolicyName ?? this.lastPolicyName,
+      localMode: localMode ?? this.localMode,
+      localAppSelectors: localAppSelectors ?? this.localAppSelectors,
+      localDomains: localDomains ?? this.localDomains,
     );
   }
 
@@ -51,6 +70,9 @@ class VpnPolicySettings {
     'vpnTarget': vpnTarget,
     'lastRevision': lastRevision,
     'lastPolicyName': lastPolicyName,
+    'localMode': localMode,
+    'localAppSelectors': localAppSelectors,
+    'localDomains': localDomains,
   };
 }
 
