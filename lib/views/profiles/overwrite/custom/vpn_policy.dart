@@ -155,27 +155,20 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   }
 
   Future<void> _load() async {
-    var settings = await vpnPolicySettingsStore.load(widget.profileId);
+    var settings = await vpnPolicySettingsStore
+        .load(widget.profileId)
+        .timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => const VpnPolicySettings(),
+        );
     if (settings.serviceUrl.trim().isEmpty) {
       settings = settings.copyWith(serviceUrl: _defaultPolicyServiceUrl);
-      await vpnPolicySettingsStore.save(widget.profileId, settings);
-    }
-    final rules = await ref.read(
-      profileCustomRulesProvider(widget.profileId).future,
-    );
-    final recoveredSelectors = inferLocalAppSelectorsFromRules(
-      mode: settings.localMode,
-      rules: rules,
-    );
-    final mergedSelectors = {
-      ...settings.localAppSelectors,
-      ...recoveredSelectors,
-    }.toList()
-      ..sort();
-    if (mergedSelectors.length != settings.localAppSelectors.length ||
-        !mergedSelectors.every(settings.localAppSelectors.contains)) {
-      settings = settings.copyWith(localAppSelectors: mergedSelectors);
-      await vpnPolicySettingsStore.save(widget.profileId, settings);
+      unawaited(
+        vpnPolicySettingsStore.saveConnection(
+          serviceUrl: settings.serviceUrl,
+          deviceKey: settings.deviceKey,
+        ),
+      );
     }
     if (!mounted) {
       return;
@@ -195,7 +188,47 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _loading = false;
     });
 
-    await _loadInstalledApps();
+    unawaited(_recoverSelectionsFromRules());
+    unawaited(_loadInstalledApps());
+  }
+
+  Future<void> _recoverSelectionsFromRules() async {
+    try {
+      final rules = await database.rulesDao
+          .queryProfileCustomRules(widget.profileId)
+          .get();
+      if (!mounted) {
+        return;
+      }
+      final recoveredSelectors = inferLocalAppSelectorsFromRules(
+        mode: _mode,
+        rules: rules,
+      );
+      final mergedSelectors = {
+        ..._selectedCustomApps,
+        ...recoveredSelectors,
+      }.toList()
+        ..sort();
+      if (mergedSelectors.length == _selectedCustomApps.length &&
+          mergedSelectors.every(_selectedCustomApps.contains)) {
+        return;
+      }
+
+      final next = _settings.copyWith(localAppSelectors: mergedSelectors);
+      setState(() {
+        _settings = next;
+        _selectedCustomApps
+          ..clear()
+          ..addAll(mergedSelectors);
+      });
+      await vpnPolicySettingsStore.save(widget.profileId, next);
+    } catch (error, stackTrace) {
+      commonPrint.log(
+        'VPN Policy: app selection recovery failed: '
+        '${compactError(error)}, $stackTrace',
+        logLevel: LogLevel.warning,
+      );
+    }
   }
 
   Future<void> _loadInstalledApps() async {
