@@ -567,7 +567,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       if (mounted) {
         setState(() {
           _assignedPolicy = null;
-          _assignmentError = compactError(error);
+          _assignmentError = describeVpnPolicyError(error);
         });
       }
     } finally {
@@ -659,7 +659,8 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _status = 'Assigned policy import failed: ${compactError(error)}';
+          _status =
+              'Assigned policy import failed: ${describeVpnPolicyError(error)}';
         });
       }
     } finally {
@@ -786,7 +787,8 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _status = 'Rule set load failed: ${compactError(error)}';
+          _status =
+              'Rule group load failed: ${describeVpnPolicyError(error)}';
         });
       }
     } finally {
@@ -859,7 +861,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _status = 'Sync failed: ${compactError(error)}';
+          _status = 'Sync failed: ${describeVpnPolicyError(error)}';
         });
       }
     } finally {
@@ -950,7 +952,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _status = compactError(error);
+          _status = describeVpnPolicyError(error);
         });
       }
     } finally {
@@ -1494,13 +1496,15 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         _urlController.text.trim().isNotEmpty &&
         _keyController.text.trim().isNotEmpty;
     return _Section(
-      title: 'Reusable server rule sets',
+      title: 'Rule groups (optional)',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Optional reusable library. Import adds these rules to the '
-            'current local configuration; it does not replace it.',
+            'A rule group is a reusable add-on, not a policy. Create groups '
+            'in the server editor, load them here, then add one to this '
+            'profile. Its apps and domains are merged into the current local '
+            'split-tunneling setup; the assigned server policy is not replaced.',
             style: context.textTheme.bodyMedium?.copyWith(
               color: context.colorScheme.onSurfaceVariant,
             ),
@@ -1516,7 +1520,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                       dimension: 18,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Load server rule sets'),
+                  : const Text('Load groups from server'),
             )
           else ...[
             for (final ruleSet in _serverRuleSets)
@@ -1534,14 +1538,14 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                   onPressed: _busy
                       ? null
                       : () => _importRuleSetAndApply(ruleSet, targets),
-                  child: const Text('Import & apply'),
+                  child: const Text('Add to this profile'),
                 ),
               ),
             TextButton(
               onPressed: _ruleSetsLoading
                   ? null
                   : () => _loadServerRuleSets(targets),
-              child: const Text('Refresh server rule sets'),
+              child: const Text('Refresh groups from server'),
             ),
           ],
           if (!configured) ...[
