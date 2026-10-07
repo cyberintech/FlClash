@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - vpn-policy-windows-preview
+      - vpn-policy-c8f8-fix
   workflow_dispatch:
 
 concurrency:
