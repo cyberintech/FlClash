@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/features/vpn_policy/policy_catalog.dart';
 import 'package:fl_clash/features/vpn_policy/policy_payload.dart';
@@ -8,7 +11,26 @@ import 'package:fl_clash/features/vpn_policy/policy_settings.dart';
 class VpnPolicyClient {
   final Dio _dio;
 
-  VpnPolicyClient({Dio? dio}) : _dio = dio ?? request.dio;
+  VpnPolicyClient({Dio? dio}) : _dio = dio ?? _directPolicyDio();
+
+  static Dio _directPolicyDio() {
+    final dio = Dio(
+      BaseOptions(
+        headers: {'User-Agent': browserUa},
+        connectTimeout: const Duration(seconds: 15),
+      ),
+    );
+    dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        // Policy Service is the control plane. Its bootstrap/identity requests
+        // must not depend on FlClash's own mixed proxy or current core state.
+        final client = HttpClient();
+        client.findProxy = (_) => 'DIRECT';
+        return client;
+      },
+    );
+    return dio;
+  }
 
   String _base(VpnPolicySettings settings) =>
       settings.serviceUrl.trim().replaceFirst(RegExp(r'/$'), '');
@@ -95,6 +117,18 @@ class VpnPolicyClient {
     }
     return VpnPolicyPayload.fromJson(data, vpnTarget: vpnTarget);
   }
+}
+
+String describeVpnPolicyError(Object error) {
+  if (error is DioException) {
+    final parts = <String>[
+      error.type.name,
+      if (error.message?.trim().isNotEmpty == true) error.message!.trim(),
+      if (error.error != null) error.error.toString(),
+    ];
+    return parts.join(' · ');
+  }
+  return compactError(error);
 }
 
 final vpnPolicyClient = VpnPolicyClient();
