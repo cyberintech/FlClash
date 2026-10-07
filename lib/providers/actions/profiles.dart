@@ -130,6 +130,8 @@ class ProfilesAction extends _$ProfilesAction {
     final platformFile = await globalState.safeRun(picker.pickerFile);
     if (platformFile == null) return;
     final bytes = await platformFile.readBytes();
+    final bootstrap = parseVpnPolicyProfileBootstrap(bytes);
+    final configBytes = bootstrap?.configBytes ?? bytes;
     globalState.navigatorKey.currentState?.popUntil((route) => route.isFirst);
     ref.read(currentPageLabelProvider.notifier).toProfiles();
     final profile = await globalState.loadingRun(
@@ -137,12 +139,15 @@ class ProfilesAction extends _$ProfilesAction {
       () async {
         return Profile.normal(
           label: platformFile.name,
-        ).saveFile(bytes, validate: (path) => _core.validateConfig(path));
+        ).saveFile(configBytes, validate: (path) => _core.validateConfig(path));
       },
       title: currentAppLocalizations.addProfile,
     );
     if (profile != null) {
       putProfile(profile);
+      if (bootstrap != null) {
+        await vpnPolicySettingsStore.save(profile.id, bootstrap.settings);
+      }
     }
   }
 
