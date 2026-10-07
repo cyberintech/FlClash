@@ -39,6 +39,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   VpnPolicySettings _settings = const VpnPolicySettings();
   VpnPolicyCatalog? _catalog;
   VpnPolicyPayload? _payload;
+  VpnPolicyPayload? _assignedPolicy;
 
   final _selectedApps = <String>{};
   final _selectedServices = <String>{};
@@ -58,6 +59,8 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
   bool _appsExpanded = false;
   bool _domainsExpanded = false;
   bool _ruleSetsLoading = false;
+  bool _assignmentLoading = false;
+  String? _assignmentError;
   bool _installedAppsPermissionGranted = true;
   late final ErrorWidgetBuilder _previousErrorWidgetBuilder;
 
@@ -190,6 +193,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
 
     unawaited(_recoverSelectionsFromRules());
     unawaited(_loadInstalledApps());
+    if (_keyController.text.trim().isNotEmpty) {
+      unawaited(_loadAssignedPolicy());
+    }
   }
 
   Future<void> _recoverSelectionsFromRules() async {
@@ -516,6 +522,247 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     }
   }
 
+  VpnPolicySettings? _serverConnectionSettings() {
+    final url = _urlController.text.trim();
+    final key = _keyController.text.trim();
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        !uri.hasScheme ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        key.isEmpty) {
+      return null;
+    }
+    return _settings.copyWith(serviceUrl: url, deviceKey: key);
+  }
+
+  Future<void> _loadAssignedPolicy() async {
+    final settings = _serverConnectionSettings();
+    if (settings == null) {
+      if (mounted) {
+        setState(() {
+          _assignedPolicy = null;
+          _assignmentError = null;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _assignmentLoading = true;
+      _assignmentError = null;
+    });
+    try {
+      final payload = await vpnPolicyClient.fetch(
+        settings,
+        vpnTarget: 'VPN',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _assignedPolicy = payload;
+        _assignmentError = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _assignedPolicy = null;
+          _assignmentError = compactError(error);
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _assignmentLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _importAssignedPolicyAndApply(List<String> targets) async {
+    final settings = _serverConnectionSettings();
+    if (settings == null) {
+      setState(() {
+        _status = 'Configure Device Key first';
+      });
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _status = 'Importing assigned policy...';
+    });
+    try {
+      final results = await Future.wait([
+        vpnPolicyClient.fetchCatalog(settings),
+        vpnPolicyClient.fetch(settings, vpnTarget: 'VPN'),
+      ]);
+      final catalog = results[0] as VpnPolicyCatalog;
+      final payload = results[1] as VpnPolicyPayload;
+
+      final selectors = <String>{...payload.customAppSelectors};
+      for (final key in payload.apps) {
+        for (final app in catalog.apps) {
+          if (app.key == key) {
+            selectors.addAll(app.selectors);
+            break;
+          }
+        }
+      }
+
+      final domains = <String>{...payload.customDomains};
+      for (final key in payload.services) {
+        for (final service in catalog.services) {
+          if (service.key == key) {
+            domains.addAll(service.domains);
+            break;
+          }
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _catalog = catalog;
+        _assignedPolicy = payload;
+        _mode = payload.mode;
+        _selectedApps.clear();
+        _selectedServices.clear();
+        _selectedCustomApps
+          ..clear()
+          ..addAll(selectors);
+        _customDomains
+          ..clear()
+          ..addAll(domains);
+      });
+
+      await _saveLocalAndApply(targets);
+      if (!mounted) {
+        return;
+      }
+
+      final next = _settings.copyWith(
+        lastRevision: payload.revision,
+        lastPolicyName: payload.policyName,
+      );
+      await vpnPolicySettingsStore.save(widget.profileId, next);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = next;
+        _status =
+            'Imported assigned policy ${payload.policyName}: '
+            '${domains.length} domains, ${selectors.length} apps';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _status = 'Assigned policy import failed: ${compactError(error)}';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Widget _serverIdentitySection(List<String> targets) {
+    final configured =
+        _urlController.text.trim().isNotEmpty &&
+        _keyController.text.trim().isNotEmpty;
+    final assigned = _assignedPolicy;
+    final error = _assignmentError;
+
+    return _Section(
+      title: 'Server identity & assigned policy',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!configured)
+            Text(
+              'Enter Device Key below to identify this installation on the server.',
+              style: context.textTheme.bodyMedium?.copyWith(
+                color: context.colorScheme.onSurfaceVariant,
+              ),
+            )
+          else if (_assignmentLoading)
+            const Row(
+              children: [
+                SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 10),
+                Text('Checking server identity...'),
+              ],
+            )
+          else if (error != null)
+            Text(
+              'Server identity check failed: $error',
+              style: context.textTheme.bodyMedium?.copyWith(
+                color: context.colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            )
+          else if (assigned != null) ...[
+            Text(
+              'This client authenticates as: ${assigned.deviceName}',
+              style: context.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${assigned.platform} · device policy #${assigned.policyId}',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: context.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              assigned.policyId == 0
+                  ? 'No server policy is assigned to this device.'
+                  : 'Assigned policy: ${assigned.policyName}',
+              style: context.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (assigned.policyId != 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                '${assigned.apps.length} semantic apps · '
+                '${assigned.services.length} services · '
+                '${assigned.customDomains.length} custom domains',
+                style: context.textTheme.bodySmall?.copyWith(
+                  color: context.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+              FilledButton.tonal(
+                onPressed: _busy
+                    ? null
+                    : () => _importAssignedPolicyAndApply(targets),
+                child: const Text('Import assigned policy'),
+              ),
+            ],
+          ],
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: configured && !_assignmentLoading
+                ? _loadAssignedPolicy
+                : null,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Refresh server identity'),
+          ),
+        ],
+      ),
+    );
+  }
   Future<void> _loadServerRuleSets(List<String> targets) async {
     final settings = _connectionSettings(targets);
     if (settings == null) {
@@ -881,6 +1128,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 setState(() {});
                 _saveConnectionDraft();
               },
+              onFieldSubmitted: (_) => _loadAssignedPolicy(),
               decoration: InputDecoration(labelText: appLocalizations.key),
             ),
             const SizedBox(height: 12),
@@ -1246,13 +1494,13 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         _urlController.text.trim().isNotEmpty &&
         _keyController.text.trim().isNotEmpty;
     return _Section(
-      title: 'Server rule sets',
+      title: 'Reusable server rule sets',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Import reusable rules once. After import they become local and '
-            'can be edited independently on this device.',
+            'Optional reusable library. Import adds these rules to the '
+            'current local configuration; it does not replace it.',
             style: context.textTheme.bodyMedium?.copyWith(
               color: context.colorScheme.onSurfaceVariant,
             ),
@@ -1326,6 +1574,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               16,
             ).copyWith(top: context.contentTopPadding),
             children: [
+              _serverIdentitySection(targets),
               _modeSection(),
               _serverRuleSetsSection(targets),
               _domainsSection(),
