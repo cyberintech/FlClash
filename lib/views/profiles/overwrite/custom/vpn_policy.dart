@@ -680,7 +680,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     final error = _assignmentError;
 
     return _Section(
-      title: 'Server identity & assigned policy',
+      title: 'Server identity & FlClash policy',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -719,7 +719,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             ),
             const SizedBox(height: 4),
             Text(
-              '${assigned.platform} · device policy #${assigned.policyId}',
+              '${assigned.platform} · FlClash policy #${assigned.policyId}',
               style: context.textTheme.bodySmall?.copyWith(
                 color: context.colorScheme.onSurfaceVariant,
               ),
@@ -727,7 +727,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             const SizedBox(height: 12),
             Text(
               assigned.policyId == 0
-                  ? 'No server policy is assigned to this device.'
+                  ? 'No server policy is assigned to this FlClash profile.'
                   : 'Assigned policy: ${assigned.policyName}',
               style: context.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w700,
