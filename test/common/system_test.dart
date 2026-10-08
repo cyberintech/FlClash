@@ -120,6 +120,23 @@ void main() {
     Linux().runProcess = Process.run;
   });
 
+  group('Windows helper update state', () {
+    test('recognizes a stopped Windows service by numeric state', () {
+      expect(
+        Windows.helperServiceQueryIsStopped(
+          'STATE              : 1  STOPPED\r\n',
+        ),
+        isTrue,
+      );
+      expect(
+        Windows.helperServiceQueryIsStopped(
+          'STATE              : 4  RUNNING\r\n',
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('statArguments', () {
     test('selects the BSD format on macOS and the GNU one elsewhere', () {
       expect(System.statArguments('/a/core', isMacOS: true), [
