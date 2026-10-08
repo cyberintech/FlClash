@@ -182,6 +182,12 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _settings = settings;
       _selectedTarget = settings.vpnTarget;
       _mode = settings.localMode;
+      _selectedApps
+        ..clear()
+        ..addAll(settings.localApps);
+      _selectedServices
+        ..clear()
+        ..addAll(settings.localServices);
       _selectedCustomApps
         ..clear()
         ..addAll(settings.localAppSelectors);
@@ -191,7 +197,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _loading = false;
     });
 
-    unawaited(_recoverSelectionsFromRules());
+    if (settings.localApps.isEmpty && settings.localServices.isEmpty) {
+      unawaited(_recoverSelectionsFromRules());
+    }
     unawaited(_loadInstalledApps());
     if (_keyController.text.trim().isNotEmpty) {
       unawaited(_loadAssignedPolicy());
@@ -427,6 +435,25 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     }
   }
 
+  List<String> _customAppSelectorsOnly() {
+    final semanticSelectors = <String>{};
+    final catalog = _catalog;
+    if (catalog != null) {
+      for (final key in _selectedApps) {
+        for (final app in catalog.apps) {
+          if (app.key == key) {
+            semanticSelectors.addAll(app.selectors);
+            break;
+          }
+        }
+      }
+    }
+    return _selectedCustomApps
+        .where((selector) => !semanticSelectors.contains(selector))
+        .toList()
+      ..sort();
+  }
+
   List<String> _localAppSelectors() {
     final selectors = <String>{..._selectedCustomApps};
     final catalog = _catalog;
@@ -494,8 +521,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         deviceKey: _keyController.text.trim(),
         vpnTarget: target,
         localMode: _mode,
-        localAppSelectors: appSelectors,
-        localDomains: domains,
+        localApps: _selectedApps.toList()..sort(),
+        localServices: _selectedServices.toList()..sort(),
+        localAppSelectors: _customAppSelectorsOnly(),
+        localDomains: List<String>.from(_customDomains),
       );
       await vpnPolicySettingsStore.save(widget.profileId, next);
       if (!mounted) {
@@ -561,12 +590,45 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       ]);
       final catalog = results[0] as VpnPolicyCatalog;
       final payload = results[1] as VpnPolicyPayload;
+      var nextSettings = settings;
+      final migrateLegacySemanticState =
+          settings.localApps.isEmpty &&
+          settings.localServices.isEmpty &&
+          settings.lastPolicyName.isNotEmpty &&
+          settings.lastPolicyName == payload.policyName;
+      if (migrateLegacySemanticState) {
+        nextSettings = settings.copyWith(
+          localMode: payload.mode,
+          localApps: List<String>.from(payload.apps)..sort(),
+          localServices: List<String>.from(payload.services)..sort(),
+          localAppSelectors:
+              List<String>.from(payload.customAppSelectors)..sort(),
+          localDomains: List<String>.from(payload.customDomains),
+        );
+        await vpnPolicySettingsStore.save(widget.profileId, nextSettings);
+      }
       if (!mounted) {
         return;
       }
       setState(() {
+        _settings = nextSettings;
         _catalog = catalog;
         _assignedPolicy = payload;
+        if (migrateLegacySemanticState) {
+          _mode = payload.mode;
+          _selectedApps
+            ..clear()
+            ..addAll(payload.apps);
+          _selectedServices
+            ..clear()
+            ..addAll(payload.services);
+          _selectedCustomApps
+            ..clear()
+            ..addAll(payload.customAppSelectors);
+          _customDomains
+            ..clear()
+            ..addAll(payload.customDomains);
+        }
         _assignmentError = null;
       });
     } catch (error) {
@@ -606,26 +668,6 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       final catalog = results[0] as VpnPolicyCatalog;
       final payload = results[1] as VpnPolicyPayload;
 
-      final selectors = <String>{...payload.customAppSelectors};
-      for (final key in payload.apps) {
-        for (final app in catalog.apps) {
-          if (app.key == key) {
-            selectors.addAll(app.selectors);
-            break;
-          }
-        }
-      }
-
-      final domains = <String>{...payload.customDomains};
-      for (final key in payload.services) {
-        for (final service in catalog.services) {
-          if (service.key == key) {
-            domains.addAll(service.domains);
-            break;
-          }
-        }
-      }
-
       if (!mounted) {
         return;
       }
@@ -633,14 +675,18 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         _catalog = catalog;
         _assignedPolicy = payload;
         _mode = payload.mode;
-        _selectedApps.clear();
-        _selectedServices.clear();
+        _selectedApps
+          ..clear()
+          ..addAll(payload.apps);
+        _selectedServices
+          ..clear()
+          ..addAll(payload.services);
         _selectedCustomApps
           ..clear()
-          ..addAll(selectors);
+          ..addAll(payload.customAppSelectors);
         _customDomains
           ..clear()
-          ..addAll(domains);
+          ..addAll(payload.customDomains);
       });
 
       await _saveLocalAndApply(targets);
@@ -660,7 +706,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         _settings = next;
         _status =
             'Imported assigned policy ${payload.policyName}: '
-            '${domains.length} domains, ${selectors.length} apps';
+            '${payload.services.length} services, '
+            '${payload.apps.length} semantic apps, '
+            '${payload.customDomains.length} custom domains';
       });
     } catch (error) {
       if (mounted) {
@@ -887,6 +935,11 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     final next = settings.copyWith(
       lastRevision: payload.revision,
       lastPolicyName: payload.policyName,
+      localMode: payload.mode,
+      localApps: List<String>.from(payload.apps)..sort(),
+      localServices: List<String>.from(payload.services)..sort(),
+      localAppSelectors: List<String>.from(payload.customAppSelectors)..sort(),
+      localDomains: List<String>.from(payload.customDomains),
     );
     await vpnPolicySettingsStore.save(widget.profileId, next);
     if (!mounted) {
