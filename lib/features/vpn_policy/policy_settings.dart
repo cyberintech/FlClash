@@ -78,18 +78,15 @@ class VpnPolicySettings {
 }
 
 class VpnPolicySettingsStore {
-  Map<String, String> _decodeConnection(String? raw) {
+  String _decodeSharedServiceUrl(String? raw) {
     if (raw == null || raw.isEmpty) {
-      return const {'serviceUrl': '', 'deviceKey': ''};
+      return '';
     }
     try {
       final jsonValue = Map<String, dynamic>.from(json.decode(raw) as Map);
-      return {
-        'serviceUrl': jsonValue['serviceUrl']?.toString() ?? '',
-        'deviceKey': jsonValue['deviceKey']?.toString() ?? '',
-      };
+      return jsonValue['serviceUrl']?.toString() ?? '';
     } catch (_) {
-      return const {'serviceUrl': '', 'deviceKey': ''};
+      return '';
     }
   }
 
@@ -101,8 +98,9 @@ class VpnPolicySettingsStore {
     await shared?.setString(
       _vpnPolicyConnectionKey,
       json.encode({
+        // The service URL may be shared across profiles. Device Key may not:
+        // it identifies one FlClash profile/device on Policy Service.
         'serviceUrl': serviceUrl.trim(),
-        'deviceKey': deviceKey.trim(),
       }),
     );
   }
@@ -119,26 +117,22 @@ class VpnPolicySettingsStore {
       } catch (_) {}
     }
 
-    final connection = _decodeConnection(
+    var serviceUrl = _decodeSharedServiceUrl(
       shared?.getString(_vpnPolicyConnectionKey),
     );
-    var serviceUrl = connection['serviceUrl'] ?? '';
-    var deviceKey = connection['deviceKey'] ?? '';
-
-    final needsMigration =
-        (serviceUrl.isEmpty && profile.serviceUrl.isNotEmpty) ||
-        (deviceKey.isEmpty && profile.deviceKey.isNotEmpty);
     if (serviceUrl.isEmpty) {
       serviceUrl = profile.serviceUrl;
-    }
-    if (deviceKey.isEmpty) {
-      deviceKey = profile.deviceKey;
-    }
-    if (needsMigration) {
-      await saveConnection(serviceUrl: serviceUrl, deviceKey: deviceKey);
+      if (serviceUrl.isNotEmpty) {
+        await saveConnection(
+          serviceUrl: serviceUrl,
+          deviceKey: profile.deviceKey,
+        );
+      }
     }
 
-    return profile.copyWith(serviceUrl: serviceUrl, deviceKey: deviceKey);
+    // Device Key always comes from this profile. A shared key could silently
+    // authenticate as another device or as a profile that has been revoked.
+    return profile.copyWith(serviceUrl: serviceUrl);
   }
 
   Future<void> save(int profileId, VpnPolicySettings settings) async {
