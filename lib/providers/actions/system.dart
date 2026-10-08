@@ -35,6 +35,23 @@ class SystemAction extends _$SystemAction {
     return coordinator.exit(cleanup: () => cleanupExitResources(needSave));
   }
 
+  Future<void> handleExitForUpdate() async {
+    if (!system.isWindows) {
+      await handleExit();
+      return;
+    }
+
+    final prepared = await windows?.prepareForUpdate() ?? false;
+    if (!prepared) {
+      dialogs.showNotifier(
+        'Could not stop FlClashHelperService. Update exit was cancelled.',
+        level: MessageLevel.error,
+      );
+      return;
+    }
+    await handleExit();
+  }
+
   @protected
   Duration get exitWatchdogDuration => const Duration(seconds: 3);
 
