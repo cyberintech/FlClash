@@ -28,6 +28,8 @@ void main() {
       vpnTarget: 'Proxy',
       lastRevision: 'rev-1',
       lastPolicyName: 'Selected',
+      localApps: ['telegram'],
+      localServices: ['youtube'],
     );
 
     await vpnPolicySettingsStore.save(7, settings);
@@ -38,6 +40,8 @@ void main() {
     expect(restored.vpnTarget, settings.vpnTarget);
     expect(restored.lastRevision, settings.lastRevision);
     expect(restored.lastPolicyName, settings.lastPolicyName);
+    expect(restored.localApps, ['telegram']);
+    expect(restored.localServices, ['youtube']);
 
     final otherProfile = await vpnPolicySettingsStore.load(8);
     expect(otherProfile.serviceUrl, settings.serviceUrl);
