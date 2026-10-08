@@ -132,6 +132,12 @@ class AppTray implements TrayPort {
         systemAction.handleExit();
       },
     );
+    final exitForUpdateItem = TrayMenuAction(
+      label: 'Exit for update',
+      onSelected: () {
+        systemAction.handleExitForUpdate();
+      },
+    );
 
     return [
       showItem,
@@ -191,6 +197,7 @@ class AppTray implements TrayPort {
         onSelected: systemAction.copyProxyEnv,
       ),
       const TrayMenuSeparator(),
+      if (isWindows) exitForUpdateItem,
       exitItem,
     ];
   }
