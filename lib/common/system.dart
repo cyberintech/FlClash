@@ -250,6 +250,9 @@ class Windows {
   static Windows? _instance;
   late DynamicLibrary _shell32;
 
+  @visibleForTesting
+  ProcessRunner runProcess = Process.run;
+
   Windows._internal() {
     _shell32 = DynamicLibrary.open('shell32.dll');
   }
@@ -306,6 +309,56 @@ class Windows {
       return false;
     }
     return true;
+  }
+
+  Future<bool> prepareForUpdate() async {
+    commonPrint.log(
+      'preparing Windows install directory for update',
+      logLevel: LogLevel.info,
+    );
+    if (!runas(appPath.helperPath, 'uninstall')) {
+      commonPrint.log(
+        'failed to launch elevated helper uninstall for update',
+        logLevel: LogLevel.error,
+      );
+      return false;
+    }
+
+    final stopped = await _waitForHelperServiceStopped();
+    commonPrint.log(
+      stopped
+          ? 'helper service stopped; update files can be replaced safely'
+          : 'helper service did not stop before update timeout',
+      logLevel: stopped ? LogLevel.info : LogLevel.error,
+    );
+    return stopped;
+  }
+
+  Future<bool> _waitForHelperServiceStopped() async {
+    const timeout = Duration(seconds: 12);
+    const interval = Duration(milliseconds: 250);
+    final stopwatch = Stopwatch()..start();
+    while (stopwatch.elapsed < timeout) {
+      try {
+        final result = await runProcess('sc.exe', ['query', appHelperService]);
+        if (result.exitCode != 0 ||
+            helperServiceQueryIsStopped(result.stdout.toString())) {
+          return true;
+        }
+      } catch (_) {
+        // Keep polling until timeout. A transient query failure is not enough
+        // to claim the executable is safe to replace.
+      }
+      await Future.delayed(interval);
+    }
+    return false;
+  }
+
+  @visibleForTesting
+  static bool helperServiceQueryIsStopped(String output) {
+    final match = RegExp(r'STATE\s*:\s*(\d+)', caseSensitive: false)
+        .firstMatch(output);
+    return match?.group(1) == '1';
   }
 
   Future<AuthorizeCode> registerService() {
