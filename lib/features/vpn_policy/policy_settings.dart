@@ -12,6 +12,8 @@ class VpnPolicySettings {
   final String lastRevision;
   final String lastPolicyName;
   final String localMode;
+  final List<String> localApps;
+  final List<String> localServices;
   final List<String> localAppSelectors;
   final List<String> localDomains;
 
@@ -22,6 +24,8 @@ class VpnPolicySettings {
     this.lastRevision = '',
     this.lastPolicyName = '',
     this.localMode = 'only_selected',
+    this.localApps = const [],
+    this.localServices = const [],
     this.localAppSelectors = const [],
     this.localDomains = const [],
   });
@@ -34,6 +38,12 @@ class VpnPolicySettings {
       lastRevision: json['lastRevision']?.toString() ?? '',
       lastPolicyName: json['lastPolicyName']?.toString() ?? '',
       localMode: json['localMode']?.toString() ?? 'only_selected',
+      localApps: (json['localApps'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
+      localServices: (json['localServices'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
       localAppSelectors: (json['localAppSelectors'] as List? ?? const [])
           .map((value) => value.toString())
           .toList(growable: false),
@@ -50,6 +60,8 @@ class VpnPolicySettings {
     String? lastRevision,
     String? lastPolicyName,
     String? localMode,
+    List<String>? localApps,
+    List<String>? localServices,
     List<String>? localAppSelectors,
     List<String>? localDomains,
   }) {
@@ -60,6 +72,8 @@ class VpnPolicySettings {
       lastRevision: lastRevision ?? this.lastRevision,
       lastPolicyName: lastPolicyName ?? this.lastPolicyName,
       localMode: localMode ?? this.localMode,
+      localApps: localApps ?? this.localApps,
+      localServices: localServices ?? this.localServices,
       localAppSelectors: localAppSelectors ?? this.localAppSelectors,
       localDomains: localDomains ?? this.localDomains,
     );
@@ -72,6 +86,8 @@ class VpnPolicySettings {
     'lastRevision': lastRevision,
     'lastPolicyName': lastPolicyName,
     'localMode': localMode,
+    'localApps': localApps,
+    'localServices': localServices,
     'localAppSelectors': localAppSelectors,
     'localDomains': localDomains,
   };
