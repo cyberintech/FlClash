@@ -73,6 +73,8 @@ VpnPolicyProfileBootstrap? parseVpnPolicyProfileBootstrap(Uint8List bytes) {
       lastRevision: meta['revision']?.toString() ?? '',
       lastPolicyName: meta['policy-name']?.toString() ?? '',
       localMode: meta['mode']?.toString() ?? 'only_selected',
+      localApps: strings(meta['apps']),
+      localServices: strings(meta['services']),
       localAppSelectors: strings(meta['app-selectors']),
       localDomains: strings(meta['domains']),
     ),
