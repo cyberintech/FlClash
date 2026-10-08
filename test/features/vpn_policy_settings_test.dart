@@ -21,10 +21,10 @@ void main() {
     expect(settings.vpnTarget, isEmpty);
   });
 
-  test('shares Policy Service connection across profiles', () async {
+  test('shares service URL but keeps Device Key per profile', () async {
     const settings = VpnPolicySettings(
       serviceUrl: 'https://policy.example.com',
-      deviceKey: 'device-key',
+      deviceKey: 'device-key-7',
       vpnTarget: 'Proxy',
       lastRevision: 'rev-1',
       lastPolicyName: 'Selected',
@@ -41,11 +41,11 @@ void main() {
 
     final otherProfile = await vpnPolicySettingsStore.load(8);
     expect(otherProfile.serviceUrl, settings.serviceUrl);
-    expect(otherProfile.deviceKey, settings.deviceKey);
+    expect(otherProfile.deviceKey, isEmpty);
     expect(otherProfile.vpnTarget, isEmpty);
   });
 
-  test('migrates legacy profile connection to device-wide storage', () async {
+  test('migrates legacy profile URL without leaking Device Key', () async {
     await store.setString(
       'vpn_policy_settings_7',
       '{"serviceUrl":"https://legacy.example.com","deviceKey":"legacy-key","vpnTarget":"Proxy"}',
@@ -57,7 +57,23 @@ void main() {
     expect(migrated.serviceUrl, 'https://legacy.example.com');
     expect(migrated.deviceKey, 'legacy-key');
     expect(otherProfile.serviceUrl, 'https://legacy.example.com');
-    expect(otherProfile.deviceKey, 'legacy-key');
+    expect(otherProfile.deviceKey, isEmpty);
+  });
+
+  test('profile Device Key wins over stale shared legacy key', () async {
+    await store.setString(
+      'vpn_policy_connection_v1',
+      '{"serviceUrl":"https://policy.example.com","deviceKey":"stale-key"}',
+    );
+    await store.setString(
+      'vpn_policy_settings_7',
+      '{"serviceUrl":"https://policy.example.com","deviceKey":"right-key","vpnTarget":"Proxy"}',
+    );
+
+    final restored = await vpnPolicySettingsStore.load(7);
+
+    expect(restored.serviceUrl, 'https://policy.example.com');
+    expect(restored.deviceKey, 'right-key');
   });
 
   test('corrupt settings fall back to defaults', () async {
