@@ -267,10 +267,31 @@ class SetupAction extends _$SetupAction {
   }
 
   void changeMode(Mode mode) {
-    ref
-        .read(patchClashConfigProvider.notifier)
-        .update((state) => state.copyWith(mode: mode));
+    ref.read(patchClashConfigProvider.notifier).update(
+      (state) => mode == Mode.global
+          ? configureGlobalFullTunnel(state, isWindows: system.isWindows)
+          : state.copyWith(mode: mode),
+    );
+
     if (mode == Mode.global) {
+      if (system.isWindows) {
+        // TUN is the full-system capture path. Keeping the Windows system
+        // proxy enabled at the same time is redundant and can double-route
+        // proxy-aware applications.
+        ref
+            .read(networkSettingProvider.notifier)
+            .update((state) => state.copyWith(systemProxy: false));
+      }
+      if (system.isAndroid) {
+        ref
+            .read(vpnSettingProvider.notifier)
+            .update(
+              (state) => configureAndroidFullCapture(
+                state,
+                isAndroid: true,
+              ),
+            );
+      }
       ref
           .read(proxiesActionProvider.notifier)
           .updateCurrentGroupName(GroupName.GLOBAL.name);
