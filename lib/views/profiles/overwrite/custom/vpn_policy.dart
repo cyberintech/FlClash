@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/database/database.dart';
 import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/features/vpn_policy/full_tunnel.dart';
 import 'package:fl_clash/features/vpn_policy/installed_apps.dart';
 import 'package:fl_clash/features/vpn_policy/local_policy.dart';
 import 'package:fl_clash/features/vpn_policy/policy_catalog.dart';
@@ -412,23 +413,37 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         RuleAction.PROCESS_PATH_WILDCARD,
       }.contains(rule.ruleAction),
     );
-    if (!hasProcessRules) {
-      return;
-    }
+
+    // VPN Policy is rule-based, so force rule mode and ensure the operating
+    // system actually sends *all* traffic into Mihomo. This is required even
+    // for all_vpn/domain-only policies, which have no PROCESS-NAME rules.
     ref
         .read(patchClashConfigProvider.notifier)
         .update(
-          (state) => state.copyWith(
-            findProcessMode: FindProcessMode.always,
-            tun: Platform.isWindows
-                ? state.tun.copyWith(enable: true)
-                : state.tun,
+          (state) => configureVpnPolicyCapture(
+            state,
+            isWindows: Platform.isWindows,
+            hasProcessRules: hasProcessRules,
           ),
         );
+
     if (Platform.isWindows) {
       ref
           .read(networkSettingProvider.notifier)
           .update((state) => state.copyWith(systemProxy: false));
+    }
+
+    if (Platform.isAndroid) {
+      // Android package access control is a second filter outside Mihomo.
+      // VPN Policy already handles split routing with Mihomo rules.
+      ref
+          .read(vpnSettingProvider.notifier)
+          .update(
+            (state) => configureAndroidFullCapture(
+              state,
+              isAndroid: true,
+            ),
+          );
     }
   }
 
