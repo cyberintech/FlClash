@@ -31,6 +31,49 @@ class AddProfileView extends ConsumerWidget {
     unawaited(ref.read(profilesActionProvider.notifier).addProfileFormFile());
   }
 
+  Future<void> _addVpnPolicyByKey(WidgetRef ref) async {
+    final key = await dialogs.showCommonDialog<String>(
+      child: InputDialog(
+        title: 'Подключить VPN Policy',
+        value: '',
+        labelText: 'Device Key',
+        hintText: 'vp1_...',
+        obscureText: true,
+        validator: (value) {
+          final key = value?.trim() ?? '';
+          if (key.isEmpty) {
+            return 'Введите Device Key';
+          }
+          if (!key.startsWith('vp1_')) {
+            return 'Device Key должен начинаться с vp1_';
+          }
+          return null;
+        },
+      ),
+    );
+    if (key == null) {
+      return;
+    }
+
+    final profile = await globalState.loadingRun(
+      () => ref
+          .read(profilesActionProvider.notifier)
+          .addVpnPolicyFromDeviceKey(key),
+      tag: LoadingTag.profiles,
+      title: 'VPN Policy',
+    );
+    if (profile == null) {
+      return;
+    }
+
+    globalState.navigatorKey.currentState?.popUntil((route) => route.isFirst);
+    dialogs.showNotifier(
+      'VPN Policy подключён: ${profile.label.isEmpty ? 'VPN Policy' : profile.label}. '
+      'VLESS и split tunneling применены автоматически.',
+      level: MessageLevel.success,
+    );
+  }
+
   Future<void> _toScan(WidgetRef ref) async {
     final profilesAction = ref.read(profilesActionProvider.notifier);
     if (system.isDesktop) {
@@ -80,6 +123,14 @@ class AddProfileView extends ConsumerWidget {
     return ListView(
       padding: EdgeInsets.only(top: context.contentTopPadding, bottom: 16),
       children: [
+        ListItem(
+          leading: const GlyphIcon(AppGlyphs.key),
+          title: const Text('VPN Policy по Device Key'),
+          subtitle: const Text(
+            'Один ключ: приложение само получит VLESS, policy и применит split tunneling.',
+          ),
+          onTap: () => _addVpnPolicyByKey(ref),
+        ),
         ListItem(
           leading: const GlyphIcon(AppGlyphs.qrCode),
           title: Text(appLocalizations.qrcode),

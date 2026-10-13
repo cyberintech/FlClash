@@ -28,9 +28,6 @@ class VpnPolicyView extends ConsumerStatefulWidget {
 }
 
 class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
-  static const _defaultPolicyServiceUrl =
-      'https://cyberintellect.tech/vpn-policy';
-
   final _urlController = TextEditingController();
   final _keyController = TextEditingController();
   final _appSearchController = TextEditingController();
@@ -165,7 +162,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           onTimeout: () => const VpnPolicySettings(),
         );
     if (settings.serviceUrl.trim().isEmpty) {
-      settings = settings.copyWith(serviceUrl: _defaultPolicyServiceUrl);
+      settings = settings.copyWith(serviceUrl: defaultVpnPolicyServiceUrl);
       unawaited(
         vpnPolicySettingsStore.saveConnection(
           serviceUrl: settings.serviceUrl,
@@ -802,7 +799,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 onPressed: _busy
                     ? null
                     : () => _importAssignedPolicyAndApply(targets),
-                child: const Text('Import assigned policy'),
+                child: const Text('Sync assigned policy now'),
               ),
             ],
           ],
@@ -1235,7 +1232,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               },
               decoration: InputDecoration(
                 labelText: appLocalizations.url,
-                hintText: _defaultPolicyServiceUrl,
+                hintText: defaultVpnPolicyServiceUrl,
               ),
             ),
             const SizedBox(height: 12),
@@ -1651,8 +1648,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 subtitle: Text(
                   [
                     if (ruleSet.description.isNotEmpty) ruleSet.description,
-                    '${ruleSet.domains.length} domains · '
-                        '${ruleSet.appSelectors.length} apps',
+                    '${ruleSet.domains.length} domains · ${ruleSet.appSelectors.length} apps',
                   ].join('\n'),
                 ),
                 trailing: FilledButton.tonal(
@@ -1713,7 +1709,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                         dimension: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Apply split tunneling'),
+                    : const Text('Apply local changes'),
               ),
               const SizedBox(height: 16),
               ..._connectionSection(context, targets),

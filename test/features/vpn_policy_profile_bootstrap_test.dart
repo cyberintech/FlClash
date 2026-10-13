@@ -7,11 +7,12 @@ import 'package:yaml/yaml.dart';
 
 void main() {
   test('extracts VPN Policy bootstrap metadata and strips it from config', () {
-    final input = '''
+    const input = '''
 x-vpn-policy:
   service-url: https://cyberintellect.tech/vpn-policy
   device-key: vp1_test
   device-name: desktop-main
+  platform: windows
   policy-name: Main
   revision: rev-1
   mode: only_selected
@@ -41,7 +42,9 @@ rules:
     );
 
     expect(parsed, isNotNull);
-    expect(parsed!.settings.deviceKey, 'vp1_test');
+    expect(parsed!.deviceName, 'desktop-main');
+    expect(parsed.platform, 'windows');
+    expect(parsed.settings.deviceKey, 'vp1_test');
     expect(parsed.settings.lastPolicyName, 'Main');
     expect(parsed.settings.localMode, 'only_selected');
     expect(parsed.settings.localApps, ['chrome']);

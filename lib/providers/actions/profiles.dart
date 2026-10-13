@@ -39,8 +39,104 @@ class ProfilesAction extends _$ProfilesAction {
     return _core.validateConfigWithData(data);
   }
 
+  Future<Profile> _syncVpnPolicyProfile(
+    Profile profile,
+    VpnPolicySettings settings,
+  ) async {
+    final serviceUrl = settings.serviceUrl.trim().isEmpty
+        ? defaultVpnPolicyServiceUrl
+        : settings.serviceUrl.trim();
+    final connection = settings.copyWith(serviceUrl: serviceUrl);
+    final bytes = await vpnPolicyClient.fetchBootstrap(connection);
+    final bootstrap = parseVpnPolicyProfileBootstrap(bytes);
+    if (bootstrap == null) {
+      throw StateError('Policy Service returned an invalid bootstrap profile');
+    }
+    final updated = await profile.saveFile(
+      bootstrap.configBytes,
+      validate: (path) => _core.validateConfig(path),
+    );
+    final nextSettings = bootstrap.settings.copyWith(
+      serviceUrl: serviceUrl,
+      deviceKey: connection.deviceKey,
+    );
+    ref.read(profilesProvider.notifier).put(updated);
+    await vpnPolicySettingsStore.save(profile.id, nextSettings);
+    if (profile.id == ref.read(currentProfileIdProvider)) {
+      ref
+          .read(setupActionProvider.notifier)
+          .applyProfileDebounce(silence: true);
+    }
+    return updated;
+  }
+
+  Future<Profile> addVpnPolicyFromDeviceKey(
+    String deviceKey, {
+    String serviceUrl = defaultVpnPolicyServiceUrl,
+  }) async {
+    final key = deviceKey.trim();
+    if (key.isEmpty) {
+      throw ArgumentError('Device Key is required');
+    }
+    final connection = VpnPolicySettings(
+      serviceUrl: serviceUrl.trim().isEmpty
+          ? defaultVpnPolicyServiceUrl
+          : serviceUrl.trim(),
+      deviceKey: key,
+    );
+    final bytes = await vpnPolicyClient.fetchBootstrap(connection);
+    final bootstrap = parseVpnPolicyProfileBootstrap(bytes);
+    if (bootstrap == null) {
+      throw StateError('Policy Service returned an invalid bootstrap profile');
+    }
+
+    Profile? existing;
+    for (final profile in ref.read(profilesProvider)) {
+      final settings = await vpnPolicySettingsStore.load(profile.id);
+      if (settings.deviceKey.trim() == key) {
+        existing = profile;
+        break;
+      }
+    }
+
+    final base =
+        existing ??
+        Profile.normal(
+          label: bootstrap.deviceName.isEmpty
+              ? 'VPN Policy'
+              : bootstrap.deviceName,
+        );
+    final updated = await base.saveFile(
+      bootstrap.configBytes,
+      validate: (path) => _core.validateConfig(path),
+    );
+    final nextSettings = bootstrap.settings.copyWith(
+      serviceUrl: connection.serviceUrl,
+      deviceKey: key,
+    );
+    ref.read(profilesProvider.notifier).put(updated);
+    await vpnPolicySettingsStore.save(updated.id, nextSettings);
+    ref.read(currentProfileIdProvider.notifier).value = updated.id;
+    ref.read(setupActionProvider.notifier).applyProfileDebounce(silence: true);
+    return updated;
+  }
+
   Future<void> autoUpdateProfiles() async {
     for (final profile in ref.read(profilesProvider)) {
+      final vpnSettings = await vpnPolicySettingsStore.load(profile.id);
+      if (vpnSettings.deviceKey.trim().isNotEmpty) {
+        try {
+          await _syncVpnPolicyProfile(profile, vpnSettings);
+        } catch (e) {
+          commonPrint.log(
+            'VPN Policy auto-sync failed for ${profile.realLabel}: '
+            '${compactError(e)}',
+            logLevel: LogLevel.warning,
+          );
+        }
+        continue;
+      }
+
       if (!profile.autoUpdate) continue;
       final isNotNeedUpdate = profile.lastUpdateDate
           ?.add(profile.autoUpdateDuration)

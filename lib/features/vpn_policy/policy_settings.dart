@@ -4,6 +4,7 @@ import 'package:fl_clash/common/common.dart';
 
 String _vpnPolicySettingsKey(int profileId) => 'vpn_policy_settings_$profileId';
 const _vpnPolicyConnectionKey = 'vpn_policy_connection_v1';
+const defaultVpnPolicyServiceUrl = 'https://cyberintellect.tech/vpn-policy';
 
 class VpnPolicySettings {
   final String serviceUrl;

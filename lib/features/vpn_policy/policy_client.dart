@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
@@ -40,6 +42,18 @@ class VpnPolicyClient {
     receiveTimeout: const Duration(seconds: 15),
     sendTimeout: const Duration(seconds: 15),
   );
+
+  Future<Uint8List> fetchBootstrap(VpnPolicySettings settings) async {
+    final response = await _dio.get<String>(
+      '${_base(settings)}/client/v1/bootstrap.yaml',
+      options: _options(settings).copyWith(responseType: ResponseType.plain),
+    );
+    final data = response.data;
+    if (data == null || data.trim().isEmpty) {
+      throw StateError('Policy Service returned no bootstrap profile');
+    }
+    return Uint8List.fromList(utf8.encode(data));
+  }
 
   Future<VpnPolicyCatalog> fetchCatalog(VpnPolicySettings settings) async {
     final response = await _dio.get<Map<String, dynamic>>(

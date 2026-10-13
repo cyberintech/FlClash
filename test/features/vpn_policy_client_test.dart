@@ -18,6 +18,34 @@ class _Adapter implements HttpClientAdapter {
   ) async {
     requested.add(options);
 
+    if (options.uri.path.endsWith('/client/v1/bootstrap.yaml')) {
+      return ResponseBody.fromString(
+        '''
+x-vpn-policy:
+  service-url: https://policy.example.com/base
+  device-key: device-key
+  device-name: laptop-main
+  platform: windows
+  policy-name: Selected
+  revision: rev-1
+  mode: only_selected
+mixed-port: 7890
+proxies:
+  - name: NUE-VLESS
+    type: vless
+    server: 203.0.113.10
+    port: 443
+    uuid: 00000000-0000-0000-0000-000000000000
+rules:
+  - MATCH,DIRECT
+''',
+        200,
+        headers: {
+          Headers.contentTypeHeader: ['application/x-yaml'],
+        },
+      );
+    }
+
     Object response;
     if (options.uri.path.endsWith('/client/v1/catalog')) {
       response = {
@@ -84,6 +112,23 @@ void main() {
     serviceUrl: 'https://policy.example.com/base/',
     deviceKey: 'device-key',
   );
+
+  test('fetches bootstrap profile with the device key', () async {
+    final adapter = _Adapter();
+    final dio = Dio()..httpClientAdapter = adapter;
+    addTearDown(dio.close);
+    final client = VpnPolicyClient(dio: dio);
+
+    final bootstrap = await client.fetchBootstrap(settings);
+
+    final request = adapter.requested.single;
+    expect(request.uri.path, '/base/client/v1/bootstrap.yaml');
+    expect(request.headers['Authorization'], 'Bearer device-key');
+    final text = utf8.decode(bootstrap);
+    expect(text, contains('device-name: laptop-main'));
+    expect(text, contains('NUE-VLESS'));
+    expect(text, contains('MATCH,DIRECT'));
+  });
 
   test('fetches catalog and policy with the device key', () async {
     final adapter = _Adapter();
