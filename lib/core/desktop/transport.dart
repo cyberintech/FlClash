@@ -140,7 +140,68 @@ final class DesktopCoreTransportBinding implements DesktopCoreTransport {
 
   @override
   Future<TransportConnected> waitUntilConnected(Duration timeout) {
-    return _transport.waitUntilConnected(timeout);
+    if (_closeOperation != null) {
+      return Future.error(StateError('IPC transport binding is closed'));
+    }
+
+    final completer = Completer<TransportConnected>();
+    late final StreamSubscription<DesktopTransportEvent> subscription;
+    late final Timer timer;
+
+    void completeConnection(TransportConnected connection) {
+      if (!completer.isCompleted) {
+        completer.complete(connection);
+      }
+    }
+
+    void completeError(Object error, StackTrace stackTrace) {
+      if (!completer.isCompleted) {
+        completer.completeError(error, stackTrace);
+      }
+    }
+
+    subscription = events.listen(
+      (event) {
+        switch (event) {
+          case TransportConnected():
+            completeConnection(event);
+          case TransportFailed(:final error, :final stackTrace):
+            completeError(error, stackTrace);
+          case TransportReady() || TransportDisconnected():
+            break;
+        }
+      },
+      onError: completeError,
+      onDone: () {
+        completeError(
+          StateError('IPC transport binding closed before connection'),
+          StackTrace.current,
+        );
+      },
+    );
+    timer = Timer(timeout, () {
+      completeError(
+        TimeoutException('Core transport connection timed out', timeout),
+        StackTrace.current,
+      );
+    });
+
+    // Subscribe before inspecting state so a connection that arrives between
+    // the state check and listener setup cannot be missed.  The binding's
+    // event stream survives a transport replacement, unlike the replaced
+    // transport's own stream.
+    final current = _transport;
+    if (current.state == DesktopTransportState.connected ||
+        current.state == DesktopTransportState.failed) {
+      current
+          .waitUntilConnected(Duration.zero)
+          .then(completeConnection, onError: completeError);
+    }
+
+    return completer.future.whenComplete(() async {
+      timer.cancel();
+      await subscription.cancel();
+    });
   }
 
   @override

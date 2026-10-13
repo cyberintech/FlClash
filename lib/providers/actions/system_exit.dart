@@ -18,17 +18,29 @@ final class SystemExitCoordinator {
     required this.exitApplication,
   });
 
-  Future<void> exit({required ExitStep cleanup}) {
+  Future<void> exit({
+    required ExitStep cleanup,
+    ExitStep? afterCoreClosed,
+    Duration? watchdogOverride,
+  }) {
     final activeOperation = _operation;
     if (activeOperation != null) {
       return activeOperation;
     }
-    final operation = _run(cleanup);
+    final operation = _run(
+      cleanup,
+      afterCoreClosed: afterCoreClosed,
+      watchdog: watchdogOverride ?? watchdogDuration,
+    );
     _operation = operation;
     return operation;
   }
 
-  Future<void> _run(ExitStep cleanup) async {
+  Future<void> _run(
+    ExitStep cleanup, {
+    ExitStep? afterCoreClosed,
+    required Duration watchdog,
+  }) async {
     Object? firstError;
     StackTrace? firstStackTrace;
 
@@ -41,15 +53,18 @@ final class SystemExitCoordinator {
       }
     }
 
-    final watchdog = Timer(watchdogDuration, () {
+    final watchdogTimer = Timer(watchdog, () {
       unawaited(_exitApplicationOnce().catchError((_) {}));
     });
     try {
       await runStep(cleanup);
       await runStep(closeWindow);
       await runStep(closeCore);
+      if (afterCoreClosed != null) {
+        await runStep(afterCoreClosed);
+      }
     } finally {
-      watchdog.cancel();
+      watchdogTimer.cancel();
       await runStep(_exitApplicationOnce);
     }
     final error = firstError;

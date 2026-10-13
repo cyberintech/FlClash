@@ -274,6 +274,28 @@ void main() {
     },
   );
 
+  test(
+    'binding connection wait survives replacement before connection',
+    () async {
+      final first = FakeDesktopCoreTransport(
+        address: 'first',
+        state: DesktopTransportState.ready,
+      );
+      final second = FakeDesktopCoreTransport(
+        address: 'second',
+        state: DesktopTransportState.ready,
+      );
+      final binding = DesktopCoreTransportBinding(first);
+
+      final waiting = binding.waitUntilConnected(const Duration(seconds: 1));
+      await binding.replace(second);
+      second.connect(pid: 6789);
+
+      expect((await waiting).pid, 6789);
+      await binding.close();
+    },
+  );
+
   test('replacing a connected transport emits a typed failure', () async {
     final first = FakeDesktopCoreTransport.connected();
     final second = FakeDesktopCoreTransport();

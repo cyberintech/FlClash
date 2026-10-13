@@ -121,6 +121,23 @@ void main() {
     expect(calls, ['cleanup', 'window', 'core', 'exit']);
   });
 
+  test('runs an update step only after Core shutdown', () async {
+    final calls = <String>[];
+    final coordinator = SystemExitCoordinator(
+      watchdogDuration: const Duration(hours: 1),
+      closeWindow: () async => calls.add('window'),
+      closeCore: () async => calls.add('core'),
+      exitApplication: () async => calls.add('exit'),
+    );
+
+    await coordinator.exit(
+      cleanup: () async => calls.add('cleanup'),
+      afterCoreClosed: () async => calls.add('update'),
+    );
+
+    expect(calls, ['cleanup', 'window', 'core', 'update', 'exit']);
+  });
+
   test('watchdog and normal completion share one application exit', () async {
     final closeCoreCompleter = Completer<void>();
     var exitCount = 0;
@@ -135,6 +152,28 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
     expect(exitCount, 1);
+    closeCoreCompleter.complete();
+    await operation;
+    expect(exitCount, 1);
+  });
+
+  test('a per-exit watchdog override can cover update preparation', () async {
+    final closeCoreCompleter = Completer<void>();
+    var exitCount = 0;
+    final coordinator = SystemExitCoordinator(
+      watchdogDuration: const Duration(milliseconds: 1),
+      closeWindow: () async {},
+      closeCore: () => closeCoreCompleter.future,
+      exitApplication: () async => exitCount++,
+    );
+
+    final operation = coordinator.exit(
+      cleanup: () async {},
+      watchdogOverride: const Duration(hours: 1),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(exitCount, 0);
     closeCoreCompleter.complete();
     await operation;
     expect(exitCount, 1);
