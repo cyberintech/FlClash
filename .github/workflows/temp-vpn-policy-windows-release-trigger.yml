@@ -1,7 +1,9 @@
 name: Temporary VPN Policy Windows Release Trigger
 
 on:
-  issues:
+  pull_request:
+    branches:
+      - main
     types:
       - opened
   schedule:
@@ -22,7 +24,7 @@ env:
 
 jobs:
   build-windows-current:
-    if: ${{ github.event_name == 'issues' || github.event_name == 'schedule' || github.event.workflow_run.head_branch == 'vpn-policy-c8f8-fix' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event.workflow_run.head_branch == 'vpn-policy-c8f8-fix' }}
     runs-on: windows-2022
     steps:
       - name: Checkout current VPN Policy branch
