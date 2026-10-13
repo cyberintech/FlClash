@@ -97,6 +97,12 @@ class ProfilesAction extends _$ProfilesAction {
         existing = profile;
         break;
       }
+      if (existing == null &&
+          settings.deviceKey.trim().isNotEmpty &&
+          bootstrap.deviceName.isNotEmpty &&
+          profile.realLabel == bootstrap.deviceName) {
+        existing = profile;
+      }
     }
 
     final base =
