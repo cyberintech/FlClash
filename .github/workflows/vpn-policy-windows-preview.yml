@@ -5,6 +5,7 @@ on:
     branches:
       - vpn-policy-windows-preview
       - vpn-policy-c8f8-fix
+      - vpn-policy-core-race-test-20261013
   workflow_dispatch:
 
 concurrency:

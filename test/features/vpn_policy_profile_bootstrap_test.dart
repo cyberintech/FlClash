@@ -15,10 +15,14 @@ x-vpn-policy:
   policy-name: Main
   revision: rev-1
   mode: only_selected
+  apps:
+    - chrome
+  services:
+    - youtube
   app-selectors:
-    - chrome.exe
+    - special.exe
   domains:
-    - youtube.com
+    - example.com
 mixed-port: 7890
 proxies:
   - name: NUE-VLESS
@@ -40,8 +44,10 @@ rules:
     expect(parsed!.settings.deviceKey, 'vp1_test');
     expect(parsed.settings.lastPolicyName, 'Main');
     expect(parsed.settings.localMode, 'only_selected');
-    expect(parsed.settings.localAppSelectors, ['chrome.exe']);
-    expect(parsed.settings.localDomains, ['youtube.com']);
+    expect(parsed.settings.localApps, ['chrome']);
+    expect(parsed.settings.localServices, ['youtube']);
+    expect(parsed.settings.localAppSelectors, ['special.exe']);
+    expect(parsed.settings.localDomains, ['example.com']);
 
     final config = loadYaml(utf8.decode(parsed.configBytes)) as YamlMap;
     expect(config.containsKey('x-vpn-policy'), isFalse);

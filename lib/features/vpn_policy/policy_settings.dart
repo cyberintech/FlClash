@@ -12,6 +12,8 @@ class VpnPolicySettings {
   final String lastRevision;
   final String lastPolicyName;
   final String localMode;
+  final List<String> localApps;
+  final List<String> localServices;
   final List<String> localAppSelectors;
   final List<String> localDomains;
 
@@ -22,6 +24,8 @@ class VpnPolicySettings {
     this.lastRevision = '',
     this.lastPolicyName = '',
     this.localMode = 'only_selected',
+    this.localApps = const [],
+    this.localServices = const [],
     this.localAppSelectors = const [],
     this.localDomains = const [],
   });
@@ -34,6 +38,12 @@ class VpnPolicySettings {
       lastRevision: json['lastRevision']?.toString() ?? '',
       lastPolicyName: json['lastPolicyName']?.toString() ?? '',
       localMode: json['localMode']?.toString() ?? 'only_selected',
+      localApps: (json['localApps'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
+      localServices: (json['localServices'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
       localAppSelectors: (json['localAppSelectors'] as List? ?? const [])
           .map((value) => value.toString())
           .toList(growable: false),
@@ -50,6 +60,8 @@ class VpnPolicySettings {
     String? lastRevision,
     String? lastPolicyName,
     String? localMode,
+    List<String>? localApps,
+    List<String>? localServices,
     List<String>? localAppSelectors,
     List<String>? localDomains,
   }) {
@@ -60,6 +72,8 @@ class VpnPolicySettings {
       lastRevision: lastRevision ?? this.lastRevision,
       lastPolicyName: lastPolicyName ?? this.lastPolicyName,
       localMode: localMode ?? this.localMode,
+      localApps: localApps ?? this.localApps,
+      localServices: localServices ?? this.localServices,
       localAppSelectors: localAppSelectors ?? this.localAppSelectors,
       localDomains: localDomains ?? this.localDomains,
     );
@@ -72,24 +86,23 @@ class VpnPolicySettings {
     'lastRevision': lastRevision,
     'lastPolicyName': lastPolicyName,
     'localMode': localMode,
+    'localApps': localApps,
+    'localServices': localServices,
     'localAppSelectors': localAppSelectors,
     'localDomains': localDomains,
   };
 }
 
 class VpnPolicySettingsStore {
-  Map<String, String> _decodeConnection(String? raw) {
+  String _decodeSharedServiceUrl(String? raw) {
     if (raw == null || raw.isEmpty) {
-      return const {'serviceUrl': '', 'deviceKey': ''};
+      return '';
     }
     try {
       final jsonValue = Map<String, dynamic>.from(json.decode(raw) as Map);
-      return {
-        'serviceUrl': jsonValue['serviceUrl']?.toString() ?? '',
-        'deviceKey': jsonValue['deviceKey']?.toString() ?? '',
-      };
+      return jsonValue['serviceUrl']?.toString() ?? '';
     } catch (_) {
-      return const {'serviceUrl': '', 'deviceKey': ''};
+      return '';
     }
   }
 
@@ -101,8 +114,9 @@ class VpnPolicySettingsStore {
     await shared?.setString(
       _vpnPolicyConnectionKey,
       json.encode({
+        // The service URL may be shared across profiles. Device Key may not:
+        // it identifies one FlClash profile/device on Policy Service.
         'serviceUrl': serviceUrl.trim(),
-        'deviceKey': deviceKey.trim(),
       }),
     );
   }
@@ -119,26 +133,22 @@ class VpnPolicySettingsStore {
       } catch (_) {}
     }
 
-    final connection = _decodeConnection(
+    var serviceUrl = _decodeSharedServiceUrl(
       shared?.getString(_vpnPolicyConnectionKey),
     );
-    var serviceUrl = connection['serviceUrl'] ?? '';
-    var deviceKey = connection['deviceKey'] ?? '';
-
-    final needsMigration =
-        (serviceUrl.isEmpty && profile.serviceUrl.isNotEmpty) ||
-        (deviceKey.isEmpty && profile.deviceKey.isNotEmpty);
     if (serviceUrl.isEmpty) {
       serviceUrl = profile.serviceUrl;
-    }
-    if (deviceKey.isEmpty) {
-      deviceKey = profile.deviceKey;
-    }
-    if (needsMigration) {
-      await saveConnection(serviceUrl: serviceUrl, deviceKey: deviceKey);
+      if (serviceUrl.isNotEmpty) {
+        await saveConnection(
+          serviceUrl: serviceUrl,
+          deviceKey: profile.deviceKey,
+        );
+      }
     }
 
-    return profile.copyWith(serviceUrl: serviceUrl, deviceKey: deviceKey);
+    // Device Key always comes from this profile. A shared key could silently
+    // authenticate as another device or as a profile that has been revoked.
+    return profile.copyWith(serviceUrl: serviceUrl);
   }
 
   Future<void> save(int profileId, VpnPolicySettings settings) async {

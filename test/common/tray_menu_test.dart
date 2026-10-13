@@ -362,6 +362,12 @@ void main() {
     expect(items[index + 1]['detail'], '⌃⇧D');
   });
 
+  test('non-Windows tray does not expose update exit', () async {
+    await update(_trayState());
+
+    expect(_labels(showCall()), isNot(contains('Exit for update')));
+  });
+
   group('a platform that is not macOS', () {
     late AppTray windows;
 
@@ -395,6 +401,7 @@ void main() {
         isNot(contains(currentAppLocalizations.speedStatistics)),
       );
       expect(_labels(showCall()), isNot(contains(HotAction.delayTest.label)));
+      expect(_labels(showCall()), contains('Exit for update'));
     });
 
     test('joins modifiers with + in the hotkey hints', () async {

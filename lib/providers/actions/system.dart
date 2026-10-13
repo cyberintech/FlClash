@@ -25,18 +25,46 @@ class SystemAction extends _$SystemAction {
     return await app?.requestInstalledAppsPermission() ?? false;
   }
 
-  Future<void> handleExit([bool needSave = true]) {
-    final coordinator = _exitCoordinator ??= SystemExitCoordinator(
+  SystemExitCoordinator _coordinator() {
+    return _exitCoordinator ??= SystemExitCoordinator(
       watchdogDuration: exitWatchdogDuration,
       closeWindow: closeWindow,
       closeCore: closeCore,
       exitApplication: exitApplication,
     );
-    return coordinator.exit(cleanup: () => cleanupExitResources(needSave));
+  }
+
+  Future<void> handleExit([bool needSave = true]) {
+    return _coordinator().exit(cleanup: () => cleanupExitResources(needSave));
+  }
+
+  Future<void> handleExitForUpdate() {
+    if (!system.isWindows) {
+      return handleExit();
+    }
+
+    return _coordinator().exit(
+      cleanup: () => cleanupExitResources(true),
+      afterCoreClosed: prepareForUpdateAfterCoreClosed,
+      watchdogOverride: updateExitWatchdogDuration,
+    );
   }
 
   @protected
   Duration get exitWatchdogDuration => const Duration(seconds: 3);
+
+  @protected
+  Duration get updateExitWatchdogDuration => const Duration(seconds: 16);
+
+  @protected
+  Future<void> prepareForUpdateAfterCoreClosed() async {
+    final prepared = await windows?.prepareForUpdate() ?? false;
+    if (!prepared) {
+      throw StateError(
+        'FlClashHelperService did not stop; update files may still be locked',
+      );
+    }
+  }
 
   @protected
   Future<void> cleanupExitResources(bool needSave) async {

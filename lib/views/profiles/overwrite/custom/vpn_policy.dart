@@ -182,6 +182,12 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _settings = settings;
       _selectedTarget = settings.vpnTarget;
       _mode = settings.localMode;
+      _selectedApps
+        ..clear()
+        ..addAll(settings.localApps);
+      _selectedServices
+        ..clear()
+        ..addAll(settings.localServices);
       _selectedCustomApps
         ..clear()
         ..addAll(settings.localAppSelectors);
@@ -191,7 +197,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _loading = false;
     });
 
-    unawaited(_recoverSelectionsFromRules());
+    if (settings.localApps.isEmpty && settings.localServices.isEmpty) {
+      unawaited(_recoverSelectionsFromRules());
+    }
     unawaited(_loadInstalledApps());
     if (_keyController.text.trim().isNotEmpty) {
       unawaited(_loadAssignedPolicy());
@@ -427,6 +435,25 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     }
   }
 
+  List<String> _customAppSelectorsOnly() {
+    final semanticSelectors = <String>{};
+    final catalog = _catalog;
+    if (catalog != null) {
+      for (final key in _selectedApps) {
+        for (final app in catalog.apps) {
+          if (app.key == key) {
+            semanticSelectors.addAll(app.selectors);
+            break;
+          }
+        }
+      }
+    }
+    return _selectedCustomApps
+        .where((selector) => !semanticSelectors.contains(selector))
+        .toList()
+      ..sort();
+  }
+
   List<String> _localAppSelectors() {
     final selectors = <String>{..._selectedCustomApps};
     final catalog = _catalog;
@@ -494,8 +521,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         deviceKey: _keyController.text.trim(),
         vpnTarget: target,
         localMode: _mode,
-        localAppSelectors: appSelectors,
-        localDomains: domains,
+        localApps: _selectedApps.toList()..sort(),
+        localServices: _selectedServices.toList()..sort(),
+        localAppSelectors: _customAppSelectorsOnly(),
+        localDomains: List<String>.from(_customDomains),
       );
       await vpnPolicySettingsStore.save(widget.profileId, next);
       if (!mounted) {
@@ -552,15 +581,54 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _assignmentError = null;
     });
     try {
-      final payload = await vpnPolicyClient.fetch(
-        settings,
-        vpnTarget: 'VPN',
-      );
+      final results = await Future.wait([
+        vpnPolicyClient.fetchCatalog(settings),
+        vpnPolicyClient.fetch(
+          settings,
+          vpnTarget: 'VPN',
+        ),
+      ]);
+      final catalog = results[0] as VpnPolicyCatalog;
+      final payload = results[1] as VpnPolicyPayload;
+      var nextSettings = settings;
+      final migrateLegacySemanticState =
+          settings.localApps.isEmpty &&
+          settings.localServices.isEmpty &&
+          settings.lastPolicyName.isNotEmpty &&
+          settings.lastPolicyName == payload.policyName;
+      if (migrateLegacySemanticState) {
+        nextSettings = settings.copyWith(
+          localMode: payload.mode,
+          localApps: List<String>.from(payload.apps)..sort(),
+          localServices: List<String>.from(payload.services)..sort(),
+          localAppSelectors:
+              List<String>.from(payload.customAppSelectors)..sort(),
+          localDomains: List<String>.from(payload.customDomains),
+        );
+        await vpnPolicySettingsStore.save(widget.profileId, nextSettings);
+      }
       if (!mounted) {
         return;
       }
       setState(() {
+        _settings = nextSettings;
+        _catalog = catalog;
         _assignedPolicy = payload;
+        if (migrateLegacySemanticState) {
+          _mode = payload.mode;
+          _selectedApps
+            ..clear()
+            ..addAll(payload.apps);
+          _selectedServices
+            ..clear()
+            ..addAll(payload.services);
+          _selectedCustomApps
+            ..clear()
+            ..addAll(payload.customAppSelectors);
+          _customDomains
+            ..clear()
+            ..addAll(payload.customDomains);
+        }
         _assignmentError = null;
       });
     } catch (error) {
@@ -600,26 +668,6 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       final catalog = results[0] as VpnPolicyCatalog;
       final payload = results[1] as VpnPolicyPayload;
 
-      final selectors = <String>{...payload.customAppSelectors};
-      for (final key in payload.apps) {
-        for (final app in catalog.apps) {
-          if (app.key == key) {
-            selectors.addAll(app.selectors);
-            break;
-          }
-        }
-      }
-
-      final domains = <String>{...payload.customDomains};
-      for (final key in payload.services) {
-        for (final service in catalog.services) {
-          if (service.key == key) {
-            domains.addAll(service.domains);
-            break;
-          }
-        }
-      }
-
       if (!mounted) {
         return;
       }
@@ -627,14 +675,18 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         _catalog = catalog;
         _assignedPolicy = payload;
         _mode = payload.mode;
-        _selectedApps.clear();
-        _selectedServices.clear();
+        _selectedApps
+          ..clear()
+          ..addAll(payload.apps);
+        _selectedServices
+          ..clear()
+          ..addAll(payload.services);
         _selectedCustomApps
           ..clear()
-          ..addAll(selectors);
+          ..addAll(payload.customAppSelectors);
         _customDomains
           ..clear()
-          ..addAll(domains);
+          ..addAll(payload.customDomains);
       });
 
       await _saveLocalAndApply(targets);
@@ -654,7 +706,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         _settings = next;
         _status =
             'Imported assigned policy ${payload.policyName}: '
-            '${domains.length} domains, ${selectors.length} apps';
+            '${payload.services.length} services, '
+            '${payload.apps.length} semantic apps, '
+            '${payload.customDomains.length} custom domains';
       });
     } catch (error) {
       if (mounted) {
@@ -688,7 +742,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             Text(
               'Enter Device Key below to identify this installation on the server.',
               style: context.textTheme.bodyMedium?.copyWith(
-                color: context.colorScheme.onSurfaceVariant,
+                color: _policyMutedTextColor,
               ),
             )
           else if (_assignmentLoading)
@@ -721,7 +775,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             Text(
               '${assigned.platform} · FlClash policy #${assigned.policyId}',
               style: context.textTheme.bodySmall?.copyWith(
-                color: context.colorScheme.onSurfaceVariant,
+                color: _policyMutedTextColor,
               ),
             ),
             const SizedBox(height: 12),
@@ -740,7 +794,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 '${assigned.services.length} services · '
                 '${assigned.customDomains.length} custom domains',
                 style: context.textTheme.bodySmall?.copyWith(
-                  color: context.colorScheme.onSurfaceVariant,
+                  color: _policyMutedTextColor,
                 ),
               ),
               const SizedBox(height: 10),
@@ -881,6 +935,11 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     final next = settings.copyWith(
       lastRevision: payload.revision,
       lastPolicyName: payload.policyName,
+      localMode: payload.mode,
+      localApps: List<String>.from(payload.apps)..sort(),
+      localServices: List<String>.from(payload.services)..sort(),
+      localAppSelectors: List<String>.from(payload.customAppSelectors)..sort(),
+      localDomains: List<String>.from(payload.customDomains),
     );
     await vpnPolicySettingsStore.save(widget.profileId, next);
     if (!mounted) {
@@ -1013,13 +1072,70 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     ];
   }
 
+  String get _platformLabel => Platform.isAndroid ? 'Android' : 'Windows';
+
+  Color get _policyPrimaryTextColor =>
+      Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFFF8FAFC)
+      : const Color(0xFF111827);
+
+  Color get _policyMutedTextColor =>
+      Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFFD7E0EC)
+      : const Color(0xFF374151);
+
+  Widget _assignedAppMappingSummary() {
+    final assigned = _assignedPolicy;
+    final catalog = _catalog;
+    if (assigned == null || assigned.apps.isEmpty || catalog == null) {
+      return const SizedBox.shrink();
+    }
+
+    final byKey = {
+      for (final app in catalog.apps) app.key: app,
+    };
+    final mapped = <VpnPolicyCatalogApp>[];
+    final unmapped = <String>[];
+    for (final key in assigned.apps) {
+      final app = byKey[key];
+      if (app != null && app.selectors.isNotEmpty) {
+        mapped.add(app);
+      } else {
+        unmapped.add(app?.title ?? key);
+      }
+    }
+
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = dark
+        ? const Color(0xFFD7E0EC)
+        : const Color(0xFF374151);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        unmapped.isEmpty
+            ? 'Server policy: ${assigned.apps.length} app(s) · '
+                'all mapped for $_platformLabel.'
+            : 'Server policy: ${assigned.apps.length} app(s) · '
+                '${mapped.length} mapped for $_platformLabel · '
+                'no $_platformLabel app mapping: ${unmapped.join(', ')}. '
+                'Their sites still work through Domain rules.',
+        style: context.textTheme.bodyMedium?.copyWith(
+          color: textColor,
+          fontWeight: FontWeight.w700,
+          height: 1.35,
+        ),
+      ),
+    );
+  }
+
   Widget _selectedAppsSummary() {
     final selected = _selectedAppEntries();
     if (selected.isEmpty) {
       return Text(
         'No applications selected.',
         style: context.textTheme.bodyMedium?.copyWith(
-          color: context.colorScheme.onSurfaceVariant,
+          color: _policyMutedTextColor,
         ),
       );
     }
@@ -1029,7 +1145,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         Text(
           'Selected apps',
           style: context.textTheme.labelLarge?.copyWith(
-            color: context.colorScheme.onSurfaceVariant,
+            color: _policyMutedTextColor,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -1272,9 +1388,12 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     final listEmpty = Platform.isAndroid ? android.isEmpty : windows.isEmpty;
 
     final selectedCount = _localAppSelectors().length;
+    final assignedSemanticCount = _assignedPolicy?.apps.length ?? 0;
 
     return _Section(
-      title: selectedCount == 0
+      title: assignedSemanticCount > 0
+          ? '${context.appLocalizations.app} · $selectedCount mapped for $_platformLabel'
+          : selectedCount == 0
           ? context.appLocalizations.app
           : '${context.appLocalizations.app} · $selectedCount selected',
       onHeaderTap: () {
@@ -1290,18 +1409,19 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           : Icon(
               _appsExpanded ? Icons.expand_less : Icons.expand_more,
               size: 30,
-              color: context.colorScheme.onSurface,
+              color: _policyPrimaryTextColor,
             ),
       child: !_appsExpanded
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _assignedAppMappingSummary(),
                 _selectedAppsSummary(),
                 const SizedBox(height: 10),
                 Text(
                   'Tap the header to choose more applications.',
                   style: context.textTheme.bodyMedium?.copyWith(
-                    color: context.colorScheme.onSurfaceVariant,
+                    color: _policyMutedTextColor,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1310,6 +1430,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           : Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _assignedAppMappingSummary(),
           _selectedAppsSummary(),
           const SizedBox(height: 12),
           TextField(
@@ -1431,7 +1552,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           : Icon(
               _domainsExpanded ? Icons.expand_less : Icons.expand_more,
               size: 30,
-              color: context.colorScheme.onSurface,
+              color: _policyPrimaryTextColor,
             ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1462,7 +1583,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               Text(
                 '$count domains selected. Tap the header to manage them.',
                 style: context.textTheme.bodyMedium?.copyWith(
-                  color: context.colorScheme.onSurfaceVariant,
+                  color: _policyMutedTextColor,
                   fontWeight: FontWeight.w600,
                 ),
               )
@@ -1506,7 +1627,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             'profile. Its apps and domains are merged into the current local '
             'split-tunneling setup; the assigned server policy is not replaced.',
             style: context.textTheme.bodyMedium?.copyWith(
-              color: context.colorScheme.onSurfaceVariant,
+              color: _policyMutedTextColor,
             ),
           ),
           const SizedBox(height: 10),
@@ -1553,7 +1674,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             Text(
               'Configure Policy Service URL and Device Key below first.',
               style: context.textTheme.bodySmall?.copyWith(
-                color: context.colorScheme.onSurfaceVariant,
+                color: _policyMutedTextColor,
               ),
             ),
           ],
@@ -1609,6 +1730,27 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             ],
           );
 
+    final baseTheme = Theme.of(context);
+    final dark = baseTheme.brightness == Brightness.dark;
+    final readableScheme = baseTheme.colorScheme.copyWith(
+      onSurface: dark
+          ? const Color(0xFFF8FAFC)
+          : const Color(0xFF111827),
+      onSurfaceVariant: dark
+          ? const Color(0xFFD7E0EC)
+          : const Color(0xFF374151),
+      outline: dark
+          ? const Color(0xFF94A3B8)
+          : const Color(0xFF64748B),
+    );
+    final readableTheme = baseTheme.copyWith(
+      colorScheme: readableScheme,
+      textTheme: baseTheme.textTheme.apply(
+        bodyColor: readableScheme.onSurface,
+        displayColor: readableScheme.onSurface,
+      ),
+    );
+
     return BaseScaffold(
       title: 'Split tunneling',
       body: Localizations.override(
@@ -1618,7 +1760,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           DefaultMaterialLocalizations.delegate,
           DefaultWidgetsLocalizations.delegate,
         ],
-        child: body,
+        child: Theme(
+          data: readableTheme,
+          child: body,
+        ),
       ),
     );
   }
