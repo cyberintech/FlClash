@@ -7,6 +7,7 @@ import 'package:fl_clash/common/system_dns.dart';
 import 'package:fl_clash/core/core.dart';
 import 'package:fl_clash/database/database.dart';
 import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/features/vpn_policy/full_tunnel.dart';
 import 'package:fl_clash/features/vpn_policy/policy_client.dart';
 import 'package:fl_clash/features/vpn_policy/policy_settings.dart';
 import 'package:fl_clash/features/vpn_policy/profile_bootstrap.dart';
