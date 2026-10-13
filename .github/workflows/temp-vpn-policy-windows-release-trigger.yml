@@ -11,6 +11,7 @@ on:
   workflow_run:
     workflows:
       - VPN Policy Windows Preview
+      - VPN Policy Android Preview
     types:
       - completed
 
