@@ -1,0 +1,1 @@
+Merge trigger for temporary Windows preview validation.
