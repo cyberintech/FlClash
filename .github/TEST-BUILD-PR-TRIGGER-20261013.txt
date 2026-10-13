@@ -1,0 +1,1 @@
+Temporary pull_request trigger for Windows preview validation.
