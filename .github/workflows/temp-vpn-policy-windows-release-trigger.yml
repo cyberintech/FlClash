@@ -1,0 +1,72 @@
+name: Temporary VPN Policy Windows Release Trigger
+
+on:
+  workflow_run:
+    workflows:
+      - VPN Policy Windows Preview
+    types:
+      - completed
+
+concurrency:
+  group: vpn-policy-windows-release-trigger
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.47.4'
+  GO_VERSION: '1.26.4'
+
+jobs:
+  build-windows-current:
+    if: ${{ github.event.workflow_run.head_branch == 'vpn-policy-c8f8-fix' }}
+    runs-on: windows-2022
+    steps:
+      - name: Checkout current VPN Policy branch
+        uses: actions/checkout@v4
+        with:
+          ref: vpn-policy-c8f8-fix
+          submodules: recursive
+
+      - name: Enable git long paths
+        run: git config --global core.longpaths true
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            services/helper
+            plugins/rust_api/rust
+          cache-directories: .dart_tool/hooks_runner
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Build Windows release bundle
+        run: flutter build windows --release
+
+      - name: Package LATEST zip
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath VPN-Policy-Windows-LATEST.zip -Force
+
+      - name: Upload release zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: VPN-Policy-Windows-release-20261013
+          path: VPN-Policy-Windows-LATEST.zip
+          if-no-files-found: error
+          retention-days: 7
