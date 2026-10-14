@@ -1,0 +1,1820 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:fl_clash/common/common.dart';
+import 'package:fl_clash/database/database.dart';
+import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/features/vpn_policy/full_tunnel.dart';
+import 'package:fl_clash/features/vpn_policy/installed_apps.dart';
+import 'package:fl_clash/features/vpn_policy/local_policy.dart';
+import 'package:fl_clash/features/vpn_policy/policy_catalog.dart';
+import 'package:fl_clash/features/vpn_policy/policy_client.dart';
+import 'package:fl_clash/features/vpn_policy/policy_payload.dart';
+import 'package:fl_clash/features/vpn_policy/policy_rule_set.dart';
+import 'package:fl_clash/features/vpn_policy/policy_settings.dart';
+import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/providers/providers.dart';
+import 'package:fl_clash/widgets/widgets.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+class VpnPolicyView extends ConsumerStatefulWidget {
+  final int profileId;
+
+  const VpnPolicyView(this.profileId, {super.key});
+
+  @override
+  ConsumerState<VpnPolicyView> createState() => _VpnPolicyViewState();
+}
+
+class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
+  final _urlController = TextEditingController();
+  final _keyController = TextEditingController();
+  final _appSearchController = TextEditingController();
+  final _domainController = TextEditingController();
+
+  VpnPolicySettings _settings = const VpnPolicySettings();
+  VpnPolicyCatalog? _catalog;
+  VpnPolicyPayload? _payload;
+  VpnPolicyPayload? _assignedPolicy;
+
+  final _selectedApps = <String>{};
+  final _selectedServices = <String>{};
+  final _selectedCustomApps = <String>{};
+  final _customDomains = <String>[];
+  List<VpnPolicyRuleSet> _serverRuleSets = const [];
+
+  List<Package> _androidPackages = const [];
+  List<VpnPolicyInstalledApp> _windowsApps = const [];
+
+  String? _selectedTarget;
+  String _mode = 'only_selected';
+  String? _status;
+  bool _loading = true;
+  bool _busy = false;
+  bool _appsLoading = false;
+  bool _appsExpanded = false;
+  bool _domainsExpanded = false;
+  bool _ruleSetsLoading = false;
+  bool _assignmentLoading = false;
+  String? _assignmentError;
+  bool _installedAppsPermissionGranted = true;
+  late final ErrorWidgetBuilder _previousErrorWidgetBuilder;
+
+  @override
+  void initState() {
+    super.initState();
+    _previousErrorWidgetBuilder = ErrorWidget.builder;
+    ErrorWidget.builder = _buildDiagnosticError;
+    _load();
+  }
+
+  Widget _buildDiagnosticError(FlutterErrorDetails details) {
+    final stack = details.stack?.toString() ?? '';
+    final message =
+        'VPN Policy runtime error\n\n'
+        '${details.exceptionAsString()}\n\n'
+        '$stack';
+
+    return ColoredBox(
+      color: const Color(0xFF101826),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: message));
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF26364D),
+                    border: Border.all(
+                      color: const Color(0xFF8AA4C8),
+                      width: 1.2,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'COPY ERROR',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFFFFFFFF),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Text(
+                    message,
+                    style: const TextStyle(
+                      color: Color(0xFFF8FAFC),
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    ErrorWidget.builder = _previousErrorWidgetBuilder;
+    _urlController.dispose();
+    _keyController.dispose();
+    _appSearchController.dispose();
+    _domainController.dispose();
+    super.dispose();
+  }
+
+  void _saveConnectionDraft() {
+    unawaited(
+      vpnPolicySettingsStore.saveConnection(
+        serviceUrl: _urlController.text,
+        deviceKey: _keyController.text,
+      ),
+    );
+  }
+
+  Future<void> _load() async {
+    var settings = await vpnPolicySettingsStore
+        .load(widget.profileId)
+        .timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => const VpnPolicySettings(),
+        );
+    if (settings.serviceUrl.trim().isEmpty) {
+      settings = settings.copyWith(serviceUrl: defaultVpnPolicyServiceUrl);
+      unawaited(
+        vpnPolicySettingsStore.saveConnection(
+          serviceUrl: settings.serviceUrl,
+          deviceKey: settings.deviceKey,
+        ),
+      );
+    }
+    if (!mounted) {
+      return;
+    }
+    _urlController.text = settings.serviceUrl;
+    _keyController.text = settings.deviceKey;
+    setState(() {
+      _settings = settings;
+      _selectedTarget = settings.vpnTarget;
+      _mode = settings.localMode;
+      _selectedApps
+        ..clear()
+        ..addAll(settings.localApps);
+      _selectedServices
+        ..clear()
+        ..addAll(settings.localServices);
+      _selectedCustomApps
+        ..clear()
+        ..addAll(settings.localAppSelectors);
+      _customDomains
+        ..clear()
+        ..addAll(settings.localDomains);
+      _loading = false;
+    });
+
+    if (settings.localApps.isEmpty && settings.localServices.isEmpty) {
+      unawaited(_recoverSelectionsFromRules());
+    }
+    unawaited(_loadInstalledApps());
+    if (_keyController.text.trim().isNotEmpty) {
+      unawaited(_loadAssignedPolicy());
+    }
+  }
+
+  Future<void> _recoverSelectionsFromRules() async {
+    try {
+      final rules = await database.rulesDao
+          .queryProfileRules(widget.profileId)
+          .get();
+      if (!mounted) {
+        return;
+      }
+      final recoveredSelectors = inferLocalAppSelectorsFromRules(
+        mode: _mode,
+        rules: rules,
+      );
+      final mergedSelectors = {
+        ..._selectedCustomApps,
+        ...recoveredSelectors,
+      }.toList()..sort();
+      if (mergedSelectors.length == _selectedCustomApps.length &&
+          mergedSelectors.every(_selectedCustomApps.contains)) {
+        return;
+      }
+
+      final next = _settings.copyWith(localAppSelectors: mergedSelectors);
+      setState(() {
+        _settings = next;
+        _selectedCustomApps
+          ..clear()
+          ..addAll(mergedSelectors);
+      });
+      await vpnPolicySettingsStore.save(widget.profileId, next);
+    } catch (error, stackTrace) {
+      commonPrint.log(
+        'VPN Policy: app selection recovery failed: '
+        '${compactError(error)}, $stackTrace',
+        logLevel: LogLevel.warning,
+      );
+    }
+  }
+
+  Future<void> _loadInstalledApps() async {
+    if (_appsLoading) {
+      return;
+    }
+    setState(() {
+      _appsLoading = true;
+    });
+    try {
+      if (Platform.isAndroid) {
+        final action = ref.read(systemActionProvider.notifier);
+        final packages = await action.getPackages();
+        final granted =
+            packages.isNotEmpty ||
+            await action.isInstalledAppsPermissionGranted();
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _androidPackages = packages.where((item) => item.internet).toList()
+            ..sort(
+              (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+            );
+          _installedAppsPermissionGranted = granted;
+        });
+      } else if (Platform.isWindows) {
+        final apps = await loadWindowsInstalledApps();
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _windowsApps = apps;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _status = compactError(error);
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _appsLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _grantInstalledAppsPermission() async {
+    final action = ref.read(systemActionProvider.notifier);
+    final granted = await action.requestInstalledAppsPermission();
+    if (!mounted) {
+      return;
+    }
+    if (granted) {
+      await _loadInstalledApps();
+    } else {
+      setState(() {
+        _installedAppsPermissionGranted = false;
+      });
+    }
+  }
+
+  String? _effectiveTarget(List<String> targets) {
+    final selected = _selectedTarget;
+    if (selected != null && targets.contains(selected)) {
+      return selected;
+    }
+    return targets.isEmpty ? null : targets.first;
+  }
+
+  VpnPolicySettings? _connectionSettings(List<String> targets) {
+    final appLocalizations = context.appLocalizations;
+    final url = _urlController.text.trim();
+    final key = _keyController.text.trim();
+    final target = _effectiveTarget(targets);
+
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        !uri.hasScheme ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      setState(() {
+        _status = appLocalizations.urlTip(appLocalizations.url);
+      });
+      return null;
+    }
+    if (key.isEmpty) {
+      setState(() {
+        _status = appLocalizations.emptyTip(appLocalizations.key);
+      });
+      return null;
+    }
+    if (target == null) {
+      setState(() {
+        _status = appLocalizations.emptyTip(appLocalizations.ruleTarget);
+      });
+      return null;
+    }
+    return _settings.copyWith(
+      serviceUrl: url,
+      deviceKey: key,
+      vpnTarget: target,
+    );
+  }
+
+  List<String> _ruleTargets() {
+    final custom = ref.read(customProfileDataProvider(widget.profileId));
+    final config = ref.read(clashConfigProvider(widget.profileId)).value;
+    return {
+        ...?custom?.ruleTargets,
+        ...?custom?.proxies,
+        if (config != null) ...config.proxyGroups.map((group) => group.name),
+        if (config != null)
+          ...config.proxies
+              .where((proxy) => proxy.type.toLowerCase() != 'direct')
+              .map((proxy) => proxy.name),
+      }.where((target) => !RuleTarget.baseTargetNames.contains(target)).toList()
+      ..sort();
+  }
+
+  Future<void> _applyRulesToRuntimeIfRunning() async {
+    final isCurrent = ref.read(currentProfileIdProvider) == widget.profileId;
+    if (!isCurrent || !ref.read(isStartProvider)) {
+      return;
+    }
+    final restarted = await ref.read(coreActionProvider.notifier).restartCore();
+    if (!restarted) {
+      throw StateError(
+        'Rules were saved, but the core restart did not complete',
+      );
+    }
+  }
+
+  Future<void> _ensureCustomOverwrite() async {
+    final profile = ref.read(profileProvider(widget.profileId));
+    if (profile == null || profile.type == ProfileType.custom) return;
+    final raw = await ref.read(coreHandlerProvider).getConfig(widget.profileId);
+    final action = ref.read(profilesActionProvider.notifier);
+    final config = await action.readCustomImport(
+      widget.profileId,
+      Uint8List.fromList(utf8.encode(yaml.encode(raw))),
+    );
+    await action.importCustomProfile(widget.profileId, config);
+    ref
+        .read(profilesProvider.notifier)
+        .updateProfile(
+          widget.profileId,
+          (state) => state.copyWith(type: ProfileType.custom),
+        );
+  }
+
+  void _configureProcessRouting(Iterable<Rule> rules) {
+    final hasProcessRules = rules.any(
+      (rule) => const {
+        RuleAction.PROCESS_NAME,
+        RuleAction.PROCESS_NAME_REGEX,
+        RuleAction.PROCESS_NAME_WILDCARD,
+        RuleAction.PROCESS_PATH,
+        RuleAction.PROCESS_PATH_REGEX,
+        RuleAction.PROCESS_PATH_WILDCARD,
+      }.contains(rule.ruleAction),
+    );
+
+    // VPN Policy is rule-based, so force rule mode and ensure the operating
+    // system actually sends *all* traffic into Mihomo. This is required even
+    // for all_vpn/domain-only policies, which have no PROCESS-NAME rules.
+    ref
+        .read(patchClashConfigProvider.notifier)
+        .update(
+          (state) => configureVpnPolicyCapture(
+            state,
+            isWindows: Platform.isWindows,
+            hasProcessRules: hasProcessRules,
+          ),
+        );
+
+    if (Platform.isWindows) {
+      ref
+          .read(networkSettingProvider.notifier)
+          .update((state) => state.copyWith(systemProxy: false));
+    }
+
+    if (Platform.isAndroid) {
+      // Android package access control is a second filter outside Mihomo.
+      // VPN Policy already handles split routing with Mihomo rules.
+      ref
+          .read(vpnSettingProvider.notifier)
+          .update(
+            (state) => configureAndroidFullCapture(state, isAndroid: true),
+          );
+    }
+  }
+
+  List<String> _customAppSelectorsOnly() {
+    final semanticSelectors = <String>{};
+    final catalog = _catalog;
+    if (catalog != null) {
+      for (final key in _selectedApps) {
+        for (final app in catalog.apps) {
+          if (app.key == key) {
+            semanticSelectors.addAll(app.selectors);
+            break;
+          }
+        }
+      }
+    }
+    return _selectedCustomApps
+        .where((selector) => !semanticSelectors.contains(selector))
+        .toList()
+      ..sort();
+  }
+
+  List<String> _localAppSelectors() {
+    final selectors = <String>{..._selectedCustomApps};
+    final catalog = _catalog;
+    if (catalog != null) {
+      for (final key in _selectedApps) {
+        for (final app in catalog.apps) {
+          if (app.key == key) {
+            selectors.addAll(app.selectors);
+            break;
+          }
+        }
+      }
+    }
+    return selectors.toList()..sort();
+  }
+
+  List<String> _localDomains() {
+    final domains = <String>{..._customDomains};
+    final catalog = _catalog;
+    if (catalog != null) {
+      for (final key in _selectedServices) {
+        for (final service in catalog.services) {
+          if (service.key == key) {
+            domains.addAll(service.domains);
+            break;
+          }
+        }
+      }
+    }
+    return domains.toList()..sort();
+  }
+
+  Future<void> _saveLocalAndApply(List<String> targets) async {
+    final target = _effectiveTarget(targets);
+    if (target == null) {
+      setState(() {
+        _status = context.appLocalizations.emptyTip(
+          context.appLocalizations.ruleTarget,
+        );
+      });
+      return;
+    }
+
+    final appSelectors = _localAppSelectors();
+    final domains = _localDomains();
+    final rules = compileLocalVpnPolicy(
+      mode: _mode,
+      vpnTarget: target,
+      appSelectors: appSelectors,
+      domains: domains,
+    );
+
+    setState(() {
+      _busy = true;
+      _status = null;
+    });
+    try {
+      await _ensureCustomOverwrite();
+      await ref
+          .read(profileRulesProvider(widget.profileId).notifier)
+          .replaceAll(rules);
+      _configureProcessRouting(rules);
+      final next = _settings.copyWith(
+        serviceUrl: _urlController.text.trim(),
+        deviceKey: _keyController.text.trim(),
+        vpnTarget: target,
+        localMode: _mode,
+        localApps: _selectedApps.toList()..sort(),
+        localServices: _selectedServices.toList()..sort(),
+        localAppSelectors: _customAppSelectorsOnly(),
+        localDomains: List<String>.from(_customDomains),
+      );
+      await vpnPolicySettingsStore.save(widget.profileId, next);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = next;
+        _selectedTarget = target;
+        _status = 'Applied locally: ${rules.length} rules';
+      });
+      await _applyRulesToRuntimeIfRunning();
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _status = 'Apply failed: ${compactError(error)}';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  VpnPolicySettings? _serverConnectionSettings() {
+    final url = _urlController.text.trim();
+    final key = _keyController.text.trim();
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        !uri.hasScheme ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        key.isEmpty) {
+      return null;
+    }
+    return _settings.copyWith(serviceUrl: url, deviceKey: key);
+  }
+
+  Future<void> _loadAssignedPolicy() async {
+    final settings = _serverConnectionSettings();
+    if (settings == null) {
+      if (mounted) {
+        setState(() {
+          _assignedPolicy = null;
+          _assignmentError = null;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _assignmentLoading = true;
+      _assignmentError = null;
+    });
+    try {
+      final results = await Future.wait([
+        vpnPolicyClient.fetchCatalog(settings),
+        vpnPolicyClient.fetch(settings, vpnTarget: 'VPN'),
+      ]);
+      final catalog = results[0] as VpnPolicyCatalog;
+      final payload = results[1] as VpnPolicyPayload;
+      var nextSettings = settings;
+      final migrateLegacySemanticState =
+          settings.localApps.isEmpty &&
+          settings.localServices.isEmpty &&
+          settings.lastPolicyName.isNotEmpty &&
+          settings.lastPolicyName == payload.policyName;
+      if (migrateLegacySemanticState) {
+        nextSettings = settings.copyWith(
+          localMode: payload.mode,
+          localApps: List<String>.from(payload.apps)..sort(),
+          localServices: List<String>.from(payload.services)..sort(),
+          localAppSelectors: List<String>.from(payload.customAppSelectors)
+            ..sort(),
+          localDomains: List<String>.from(payload.customDomains),
+        );
+        await vpnPolicySettingsStore.save(widget.profileId, nextSettings);
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = nextSettings;
+        _catalog = catalog;
+        _assignedPolicy = payload;
+        if (migrateLegacySemanticState) {
+          _mode = payload.mode;
+          _selectedApps
+            ..clear()
+            ..addAll(payload.apps);
+          _selectedServices
+            ..clear()
+            ..addAll(payload.services);
+          _selectedCustomApps
+            ..clear()
+            ..addAll(payload.customAppSelectors);
+          _customDomains
+            ..clear()
+            ..addAll(payload.customDomains);
+        }
+        _assignmentError = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _assignedPolicy = null;
+          _assignmentError = describeVpnPolicyError(error);
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _assignmentLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _importAssignedPolicyAndApply(List<String> targets) async {
+    final settings = _serverConnectionSettings();
+    if (settings == null) {
+      setState(() {
+        _status = 'Configure Device Key first';
+      });
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _status = 'Importing assigned policy...';
+    });
+    try {
+      final results = await Future.wait([
+        vpnPolicyClient.fetchCatalog(settings),
+        vpnPolicyClient.fetch(settings, vpnTarget: 'VPN'),
+      ]);
+      final catalog = results[0] as VpnPolicyCatalog;
+      final payload = results[1] as VpnPolicyPayload;
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _catalog = catalog;
+        _assignedPolicy = payload;
+        _mode = payload.mode;
+        _selectedApps
+          ..clear()
+          ..addAll(payload.apps);
+        _selectedServices
+          ..clear()
+          ..addAll(payload.services);
+        _selectedCustomApps
+          ..clear()
+          ..addAll(payload.customAppSelectors);
+        _customDomains
+          ..clear()
+          ..addAll(payload.customDomains);
+      });
+
+      await _saveLocalAndApply(targets);
+      if (!mounted) {
+        return;
+      }
+
+      final next = _settings.copyWith(
+        lastRevision: payload.revision,
+        lastPolicyName: payload.policyName,
+      );
+      await vpnPolicySettingsStore.save(widget.profileId, next);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = next;
+        _status =
+            'Imported assigned policy ${payload.policyName}: '
+            '${payload.services.length} services, '
+            '${payload.apps.length} semantic apps, '
+            '${payload.customDomains.length} custom domains';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _status =
+              'Assigned policy import failed: ${describeVpnPolicyError(error)}';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Widget _serverIdentitySection(List<String> targets) {
+    final configured =
+        _urlController.text.trim().isNotEmpty &&
+        _keyController.text.trim().isNotEmpty;
+    final assigned = _assignedPolicy;
+    final error = _assignmentError;
+
+    return _Section(
+      title: 'Server identity & FlClash policy',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!configured)
+            Text(
+              'Enter Device Key below to identify this installation on the server.',
+              style: context.textTheme.bodyMedium?.copyWith(
+                color: _policyMutedTextColor,
+              ),
+            )
+          else if (_assignmentLoading)
+            const Row(
+              children: [
+                SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 10),
+                Text('Checking server identity...'),
+              ],
+            )
+          else if (error != null)
+            Text(
+              'Server identity check failed: $error',
+              style: context.textTheme.bodyMedium?.copyWith(
+                color: context.colorScheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            )
+          else if (assigned != null) ...[
+            Text(
+              'This client authenticates as: ${assigned.deviceName}',
+              style: context.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${assigned.platform} · FlClash policy #${assigned.policyId}',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: _policyMutedTextColor,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              assigned.policyId == 0
+                  ? 'No server policy is assigned to this FlClash profile.'
+                  : 'Assigned policy: ${assigned.policyName}',
+              style: context.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (assigned.policyId != 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                '${assigned.apps.length} semantic apps · '
+                '${assigned.services.length} services · '
+                '${assigned.customDomains.length} custom domains',
+                style: context.textTheme.bodySmall?.copyWith(
+                  color: _policyMutedTextColor,
+                ),
+              ),
+              const SizedBox(height: 10),
+              FilledButton.tonal(
+                onPressed: _busy
+                    ? null
+                    : () => _importAssignedPolicyAndApply(targets),
+                child: const Text('Sync assigned policy now'),
+              ),
+            ],
+          ],
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: configured && !_assignmentLoading
+                ? _loadAssignedPolicy
+                : null,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Refresh server identity'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _loadServerRuleSets(List<String> targets) async {
+    final settings = _connectionSettings(targets);
+    if (settings == null) {
+      return;
+    }
+    setState(() {
+      _ruleSetsLoading = true;
+      _status = null;
+    });
+    try {
+      await vpnPolicySettingsStore.save(widget.profileId, settings);
+      final ruleSets = await vpnPolicyClient.fetchRuleSets(settings);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _settings = settings;
+        _serverRuleSets = ruleSets;
+        _status = 'Loaded ${ruleSets.length} server rule set(s)';
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _status = 'Rule group load failed: ${describeVpnPolicyError(error)}';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _ruleSetsLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _importRuleSetAndApply(
+    VpnPolicyRuleSet ruleSet,
+    List<String> targets,
+  ) async {
+    final beforeApps = _localAppSelectors().toSet();
+    final beforeDomains = _localDomains().toSet();
+    setState(() {
+      _selectedCustomApps.addAll(ruleSet.appSelectors);
+      for (final domain in ruleSet.domains) {
+        if (!_customDomains.contains(domain)) {
+          _customDomains.add(domain);
+        }
+      }
+    });
+    await _saveLocalAndApply(targets);
+    if (!mounted) {
+      return;
+    }
+    final addedApps = _localAppSelectors()
+        .toSet()
+        .difference(beforeApps)
+        .length;
+    final addedDomains = _localDomains()
+        .toSet()
+        .difference(beforeDomains)
+        .length;
+    setState(() {
+      _status =
+          'Imported ${ruleSet.name}: +$addedDomains domains, +$addedApps apps';
+    });
+  }
+
+  Future<void> _refreshFromServer({
+    bool applyRules = true,
+    List<String>? targets,
+  }) async {
+    final settings = _connectionSettings(targets ?? _ruleTargets());
+    if (settings == null) {
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _status = 'Syncing...';
+    });
+    try {
+      await vpnPolicySettingsStore.save(widget.profileId, settings);
+      final results = await Future.wait([
+        vpnPolicyClient.fetchCatalog(settings),
+        vpnPolicyClient.fetch(settings, vpnTarget: settings.vpnTarget),
+      ]);
+      final catalog = results[0] as VpnPolicyCatalog;
+      final payload = results[1] as VpnPolicyPayload;
+      if (applyRules) {
+        await _ensureCustomOverwrite();
+        await ref
+            .read(profileRulesProvider(widget.profileId).notifier)
+            .replaceAll(payload.rules);
+        _configureProcessRouting(payload.rules);
+      }
+      await _applyRemoteState(settings, catalog, payload);
+      if (applyRules) {
+        await _applyRulesToRuntimeIfRunning();
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _status = 'Sync failed: ${describeVpnPolicyError(error)}';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _applyRemoteState(
+    VpnPolicySettings settings,
+    VpnPolicyCatalog catalog,
+    VpnPolicyPayload payload,
+  ) async {
+    final next = settings.copyWith(
+      lastRevision: payload.revision,
+      lastPolicyName: payload.policyName,
+      localMode: payload.mode,
+      localApps: List<String>.from(payload.apps)..sort(),
+      localServices: List<String>.from(payload.services)..sort(),
+      localAppSelectors: List<String>.from(payload.customAppSelectors)..sort(),
+      localDomains: List<String>.from(payload.customDomains),
+    );
+    await vpnPolicySettingsStore.save(widget.profileId, next);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _settings = next;
+      _catalog = catalog;
+      _payload = payload;
+      _selectedTarget = settings.vpnTarget;
+      _mode = payload.mode;
+      _selectedApps
+        ..clear()
+        ..addAll(payload.apps);
+      _selectedServices
+        ..clear()
+        ..addAll(payload.services);
+      _selectedCustomApps
+        ..clear()
+        ..addAll(payload.customAppSelectors);
+      _customDomains
+        ..clear()
+        ..addAll(payload.customDomains);
+      final policyLabel = payload.policyName.isEmpty
+          ? 'Policy'
+          : payload.policyName;
+      _status =
+          'Synced: $policyLabel · ${payload.rules.length} rules'
+          '${payload.revision.isEmpty ? '' : ' · ${payload.revision}'}';
+    });
+  }
+
+  Future<void> _saveToPolicyServiceAndApply(List<String> targets) async {
+    final settings = _connectionSettings(targets);
+    if (settings == null) {
+      return;
+    }
+
+    setState(() {
+      _busy = true;
+      _status = null;
+    });
+    try {
+      await vpnPolicySettingsStore.save(widget.profileId, settings);
+      final payload = await vpnPolicyClient.update(
+        settings,
+        vpnTarget: settings.vpnTarget,
+        mode: _mode,
+        apps: _selectedApps.toList()..sort(),
+        services: _selectedServices.toList()..sort(),
+        customDomains: List<String>.from(_customDomains),
+        customAppSelectors: _selectedCustomApps.where((selector) {
+          final semantic = _catalog?.selectorToAppKey[selector];
+          return semantic == null || !_selectedApps.contains(semantic);
+        }).toList()..sort(),
+      );
+      await _ensureCustomOverwrite();
+      await ref
+          .read(profileRulesProvider(widget.profileId).notifier)
+          .replaceAll(payload.rules);
+      _configureProcessRouting(payload.rules);
+      final catalog = _catalog ?? await vpnPolicyClient.fetchCatalog(settings);
+      await _applyRemoteState(settings, catalog, payload);
+      await _applyRulesToRuntimeIfRunning();
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _status = describeVpnPolicyError(error);
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  void _toggleInstalledApp(String selector, bool selected) {
+    final semantic = _catalog?.selectorToAppKey[selector];
+    setState(() {
+      if (selected) {
+        _selectedCustomApps.add(selector);
+        if (semantic != null) {
+          _selectedApps.add(semantic);
+        }
+      } else {
+        _selectedCustomApps.remove(selector);
+        if (semantic != null) {
+          _selectedApps.remove(semantic);
+        }
+      }
+    });
+  }
+
+  bool _isInstalledAppSelected(String selector) {
+    if (_selectedCustomApps.contains(selector)) {
+      return true;
+    }
+    final semantic = _catalog?.selectorToAppKey[selector];
+    return semantic != null && _selectedApps.contains(semantic);
+  }
+
+  String _labelForAppSelector(String selector) {
+    if (Platform.isAndroid) {
+      for (final item in _androidPackages) {
+        if (item.packageName == selector) {
+          return item.label;
+        }
+      }
+    } else if (Platform.isWindows) {
+      for (final item in _windowsApps) {
+        if (item.selector == selector) {
+          return item.label;
+        }
+      }
+    }
+    return selector;
+  }
+
+  List<({String selector, String label})> _selectedAppEntries() {
+    return [
+      for (final selector in _localAppSelectors())
+        (selector: selector, label: _labelForAppSelector(selector)),
+    ];
+  }
+
+  String get _platformLabel => Platform.isAndroid ? 'Android' : 'Windows';
+
+  Color get _policyPrimaryTextColor =>
+      Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFFF8FAFC)
+      : const Color(0xFF111827);
+
+  Color get _policyMutedTextColor =>
+      Theme.of(context).brightness == Brightness.dark
+      ? const Color(0xFFD7E0EC)
+      : const Color(0xFF374151);
+
+  Widget _assignedAppMappingSummary() {
+    final assigned = _assignedPolicy;
+    final catalog = _catalog;
+    if (assigned == null || assigned.apps.isEmpty || catalog == null) {
+      return const SizedBox.shrink();
+    }
+
+    final byKey = {for (final app in catalog.apps) app.key: app};
+    final mapped = <VpnPolicyCatalogApp>[];
+    final unmapped = <String>[];
+    for (final key in assigned.apps) {
+      final app = byKey[key];
+      if (app != null && app.selectors.isNotEmpty) {
+        mapped.add(app);
+      } else {
+        unmapped.add(app?.title ?? key);
+      }
+    }
+
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = dark ? const Color(0xFFD7E0EC) : const Color(0xFF374151);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        unmapped.isEmpty
+            ? 'Server policy: ${assigned.apps.length} app(s) · '
+                  'all mapped for $_platformLabel.'
+            : 'Server policy: ${assigned.apps.length} app(s) · '
+                  '${mapped.length} mapped for $_platformLabel · '
+                  'no $_platformLabel app mapping: ${unmapped.join(', ')}. '
+                  'Their sites still work through Domain rules.',
+        style: context.textTheme.bodyMedium?.copyWith(
+          color: textColor,
+          fontWeight: FontWeight.w700,
+          height: 1.35,
+        ),
+      ),
+    );
+  }
+
+  Widget _selectedAppsSummary() {
+    final selected = _selectedAppEntries();
+    if (selected.isEmpty) {
+      return Text(
+        'No applications selected.',
+        style: context.textTheme.bodyMedium?.copyWith(
+          color: _policyMutedTextColor,
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Selected apps',
+          style: context.textTheme.labelLarge?.copyWith(
+            color: _policyMutedTextColor,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final app in selected)
+              InputChip(
+                label: Text(app.label),
+                tooltip: app.selector,
+                onDeleted: () => _toggleInstalledApp(app.selector, false),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _normalizeDomain(String value) {
+    var domain = value.trim().toLowerCase();
+    domain = domain.replaceFirst(RegExp(r'^https?://'), '');
+    domain = domain.split('/').first;
+    domain = domain.replaceFirst(RegExp(r'^\*\.'), '');
+    return domain;
+  }
+
+  void _addDomain() {
+    final domain = _normalizeDomain(_domainController.text);
+    if (domain.isEmpty) {
+      return;
+    }
+    setState(() {
+      if (!_customDomains.contains(domain)) {
+        _customDomains.add(domain);
+      }
+      _domainController.clear();
+    });
+  }
+
+  List<Widget> _connectionSection(BuildContext context, List<String> targets) {
+    final appLocalizations = context.appLocalizations;
+    final selectedTarget = _effectiveTarget(targets);
+    final status = _status;
+    final isError = status?.startsWith('Sync failed:') == true;
+    final isSuccess =
+        status?.startsWith('Synced:') == true ||
+        status?.startsWith('Applied locally:') == true;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final statusBackground = isError
+        ? (dark ? const Color(0xFF4A1D24) : const Color(0xFFFFECEE))
+        : isSuccess
+        ? (dark ? const Color(0xFF153B2A) : const Color(0xFFE9F8EF))
+        : (dark ? const Color(0xFF26364D) : const Color(0xFFEAF2FC));
+    final statusBorder = isError
+        ? const Color(0xFFF87171)
+        : isSuccess
+        ? const Color(0xFF4ADE80)
+        : const Color(0xFF60A5FA);
+    final statusTextColor = dark
+        ? const Color(0xFFFFFFFF)
+        : isError
+        ? const Color(0xFF7F1D1D)
+        : isSuccess
+        ? const Color(0xFF14532D)
+        : const Color(0xFF1E3A5F);
+    return [
+      _Section(
+        title: 'Policy Service (optional)',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_settings.lastPolicyName.isNotEmpty) ...[
+              Text(
+                _settings.lastPolicyName,
+                style: context.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+            ],
+            TextFormField(
+              controller: _urlController,
+              keyboardType: TextInputType.url,
+              onChanged: (_) {
+                setState(() {});
+                _saveConnectionDraft();
+              },
+              decoration: InputDecoration(
+                labelText: appLocalizations.url,
+                hintText: defaultVpnPolicyServiceUrl,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _keyController,
+              obscureText: true,
+              onChanged: (_) {
+                setState(() {});
+                _saveConnectionDraft();
+              },
+              onFieldSubmitted: (_) => _loadAssignedPolicy(),
+              decoration: InputDecoration(labelText: appLocalizations.key),
+            ),
+            const SizedBox(height: 12),
+            InputDecorator(
+              decoration: InputDecoration(
+                labelText: appLocalizations.ruleTarget,
+              ),
+              child: targets.isEmpty
+                  ? Text(appLocalizations.selectSplitStrategy)
+                  : Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final target in targets)
+                          ChoiceChip(
+                            label: Text(target),
+                            selected: selectedTarget == target,
+                            onSelected: (_) {
+                              setState(() {
+                                _selectedTarget = target;
+                              });
+                            },
+                          ),
+                      ],
+                    ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonal(
+              onPressed: _busy
+                  ? null
+                  : () => _refreshFromServer(targets: targets),
+              child: _busy
+                  ? const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 10),
+                        Text('Syncing...'),
+                      ],
+                    )
+                  : Text(appLocalizations.sync),
+            ),
+            if (status?.isNotEmpty == true) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: statusBackground,
+                  border: Border.all(color: statusBorder, width: 1.4),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      isError
+                          ? Icons.error_outline
+                          : isSuccess
+                          ? Icons.check_circle_outline
+                          : Icons.info_outline,
+                      size: 21,
+                      color: statusTextColor,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: SelectableText(
+                        status!,
+                        style: context.textTheme.bodyMedium?.copyWith(
+                          color: statusTextColor,
+                          fontWeight: FontWeight.w700,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ];
+  }
+
+  Widget _modeSection() {
+    final l = context.appLocalizations;
+    final modes = <(String, String)>[
+      ('only_selected', l.whitelistMode),
+      ('exclude_selected', l.blacklistMode),
+      ('all_vpn', l.global),
+    ];
+    return _Section(
+      title: l.mode,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final entry in modes)
+            ChoiceChip(
+              label: Text(entry.$2),
+              selected: _mode == entry.$1,
+              onSelected: (_) {
+                setState(() {
+                  _mode = entry.$1;
+                });
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _appsSection() {
+    final query = _appSearchController.text.trim().toLowerCase();
+    final android = _androidPackages
+        .where(
+          (item) =>
+              query.isEmpty ||
+              item.label.toLowerCase().contains(query) ||
+              item.packageName.toLowerCase().contains(query),
+        )
+        .toList();
+    final windows = _windowsApps
+        .where(
+          (item) =>
+              query.isEmpty ||
+              item.label.toLowerCase().contains(query) ||
+              item.selector.toLowerCase().contains(query),
+        )
+        .toList();
+
+    final hasNativeApps = Platform.isAndroid || Platform.isWindows;
+    final listEmpty = Platform.isAndroid ? android.isEmpty : windows.isEmpty;
+
+    final selectedCount = _localAppSelectors().length;
+    final assignedSemanticCount = _assignedPolicy?.apps.length ?? 0;
+
+    return _Section(
+      title: assignedSemanticCount > 0
+          ? '${context.appLocalizations.app} · $selectedCount mapped for $_platformLabel'
+          : selectedCount == 0
+          ? context.appLocalizations.app
+          : '${context.appLocalizations.app} · $selectedCount selected',
+      onHeaderTap: () {
+        setState(() {
+          _appsExpanded = !_appsExpanded;
+        });
+      },
+      trailing: _appsLoading
+          ? const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(
+              _appsExpanded ? Icons.expand_less : Icons.expand_more,
+              size: 30,
+              color: _policyPrimaryTextColor,
+            ),
+      child: !_appsExpanded
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _assignedAppMappingSummary(),
+                _selectedAppsSummary(),
+                const SizedBox(height: 10),
+                Text(
+                  'Tap the header to choose more applications.',
+                  style: context.textTheme.bodyMedium?.copyWith(
+                    color: _policyMutedTextColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _assignedAppMappingSummary(),
+                _selectedAppsSummary(),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _appSearchController,
+                  autofocus: Platform.isWindows,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: 'Search apps by name, .exe or package',
+                    suffixIcon: IconButton(
+                      tooltip: 'Refresh installed apps',
+                      onPressed: _appsLoading ? null : _loadInstalledApps,
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ),
+                ),
+                if (Platform.isAndroid && !_installedAppsPermissionGranted) ...[
+                  const SizedBox(height: 8),
+                  FilledButton.tonal(
+                    onPressed: _grantInstalledAppsPermission,
+                    child: Text(context.appLocalizations.confirm),
+                  ),
+                ],
+                if (hasNativeApps && listEmpty && !_appsLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text('No installed apps found'),
+                  ),
+                if (Platform.isAndroid)
+                  for (final item in android)
+                    CheckboxListTile(
+                      value: _isInstalledAppSelected(item.packageName),
+                      onChanged: (value) {
+                        _toggleInstalledApp(item.packageName, value ?? false);
+                      },
+                      secondary: PackageIcon(
+                        packageName: item.packageName,
+                        size: 36,
+                        placeholder: const Icon(Icons.apps),
+                      ),
+                      title: Text(item.label),
+                      subtitle: Text(item.packageName),
+                      controlAffinity: ListTileControlAffinity.trailing,
+                    ),
+                if (Platform.isWindows)
+                  for (final item in windows)
+                    CheckboxListTile(
+                      value: _isInstalledAppSelected(item.selector),
+                      onChanged: (value) {
+                        _toggleInstalledApp(item.selector, value ?? false);
+                      },
+                      secondary: const Icon(Icons.desktop_windows),
+                      title: Text(item.label),
+                      subtitle: Text(item.selector),
+                      controlAffinity: ListTileControlAffinity.trailing,
+                    ),
+                if (!hasNativeApps && _catalog != null)
+                  for (final item in _catalog!.apps)
+                    CheckboxListTile(
+                      value: _selectedApps.contains(item.key),
+                      onChanged: (value) {
+                        setState(() {
+                          value == true
+                              ? _selectedApps.add(item.key)
+                              : _selectedApps.remove(item.key);
+                        });
+                      },
+                      title: Text(item.title),
+                      subtitle: Text(item.selectors.join(', ')),
+                    ),
+              ],
+            ),
+    );
+  }
+
+  Widget _servicesSection() {
+    final services = _catalog?.services ?? const <VpnPolicyCatalogService>[];
+    return _Section(
+      title: 'Services',
+      child: services.isEmpty
+          ? const Text('Connect to Policy Service to load services')
+          : Column(
+              children: [
+                for (final service in services)
+                  CheckboxListTile(
+                    value: _selectedServices.contains(service.key),
+                    onChanged: (value) {
+                      setState(() {
+                        value == true
+                            ? _selectedServices.add(service.key)
+                            : _selectedServices.remove(service.key);
+                      });
+                    },
+                    title: Text(service.title),
+                    subtitle: service.domains.isEmpty
+                        ? null
+                        : Text(service.domains.join(', ')),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Widget _domainsSection() {
+    final count = _customDomains.length;
+    return _Section(
+      title: count == 0
+          ? context.appLocalizations.domain
+          : '${context.appLocalizations.domain} · $count selected',
+      onHeaderTap: count == 0
+          ? null
+          : () {
+              setState(() {
+                _domainsExpanded = !_domainsExpanded;
+              });
+            },
+      trailing: count == 0
+          ? null
+          : Icon(
+              _domainsExpanded ? Icons.expand_less : Icons.expand_more,
+              size: 30,
+              color: _policyPrimaryTextColor,
+            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _domainController,
+                  keyboardType: TextInputType.url,
+                  onSubmitted: (_) => _addDomain(),
+                  decoration: const InputDecoration(
+                    hintText: 'example.com',
+                    prefixIcon: Icon(Icons.language),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                onPressed: _addDomain,
+                icon: const Icon(Icons.add),
+              ),
+            ],
+          ),
+          if (count > 0) ...[
+            const SizedBox(height: 10),
+            if (!_domainsExpanded)
+              Text(
+                '$count domains selected. Tap the header to manage them.',
+                style: context.textTheme.bodyMedium?.copyWith(
+                  color: _policyMutedTextColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final domain in _customDomains)
+                      InputChip(
+                        label: Text(domain),
+                        onDeleted: () {
+                          setState(() {
+                            _customDomains.remove(domain);
+                          });
+                        },
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _serverRuleSetsSection(List<String> targets) {
+    final configured =
+        _urlController.text.trim().isNotEmpty &&
+        _keyController.text.trim().isNotEmpty;
+    return _Section(
+      title: 'Rule groups (optional)',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'A rule group is a reusable add-on, not a policy. Create groups '
+            'in the server editor, load them here, then add one to this '
+            'profile. Its apps and domains are merged into the current local '
+            'split-tunneling setup; the assigned server policy is not replaced.',
+            style: context.textTheme.bodyMedium?.copyWith(
+              color: _policyMutedTextColor,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (_serverRuleSets.isEmpty)
+            FilledButton.tonal(
+              onPressed: !configured || _ruleSetsLoading
+                  ? null
+                  : () => _loadServerRuleSets(targets),
+              child: _ruleSetsLoading
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Load groups from server'),
+            )
+          else ...[
+            for (final ruleSet in _serverRuleSets)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(ruleSet.name),
+                subtitle: Text(
+                  [
+                    if (ruleSet.description.isNotEmpty) ruleSet.description,
+                    '${ruleSet.domains.length} domains · ${ruleSet.appSelectors.length} apps',
+                  ].join('\n'),
+                ),
+                trailing: FilledButton.tonal(
+                  onPressed: _busy
+                      ? null
+                      : () => _importRuleSetAndApply(ruleSet, targets),
+                  child: const Text('Add to this profile'),
+                ),
+              ),
+            TextButton(
+              onPressed: _ruleSetsLoading
+                  ? null
+                  : () => _loadServerRuleSets(targets),
+              child: const Text('Refresh groups from server'),
+            ),
+          ],
+          if (!configured) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Configure Policy Service URL and Device Key below first.',
+              style: context.textTheme.bodySmall?.copyWith(
+                color: _policyMutedTextColor,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(customProfileDataProvider(widget.profileId));
+    ref.watch(clashConfigProvider(widget.profileId));
+    final targets = _ruleTargets();
+
+    final body = _loading
+        ? const Center(child: CircularProgressIndicator())
+        : ListView(
+            padding: const EdgeInsets.all(
+              16,
+            ).copyWith(top: context.contentTopPadding),
+            children: [
+              _serverIdentitySection(targets),
+              _modeSection(),
+              _serverRuleSetsSection(targets),
+              _domainsSection(),
+              _appsSection(),
+              if (_catalog != null) _servicesSection(),
+              const SizedBox(height: 4),
+              FilledButton(
+                onPressed: _busy ? null : () => _saveLocalAndApply(targets),
+                child: _busy
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Apply local changes'),
+              ),
+              const SizedBox(height: 16),
+              ..._connectionSection(context, targets),
+              FilledButton.tonal(
+                onPressed: _busy
+                    ? null
+                    : () => _saveToPolicyServiceAndApply(targets),
+                child: const Text('Save to Policy Service'),
+              ),
+              if (_payload != null && _payload!.revision.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(_payload!.revision, style: context.textTheme.bodySmall),
+              ],
+            ],
+          );
+
+    final baseTheme = Theme.of(context);
+    final dark = baseTheme.brightness == Brightness.dark;
+    final readableScheme = baseTheme.colorScheme.copyWith(
+      onSurface: dark ? const Color(0xFFF8FAFC) : const Color(0xFF111827),
+      onSurfaceVariant: dark
+          ? const Color(0xFFD7E0EC)
+          : const Color(0xFF374151),
+      outline: dark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+    );
+    final readableTheme = baseTheme.copyWith(
+      colorScheme: readableScheme,
+      textTheme: baseTheme.textTheme.apply(
+        bodyColor: readableScheme.onSurface,
+        displayColor: readableScheme.onSurface,
+      ),
+    );
+
+    return BaseScaffold(
+      title: 'Split tunneling',
+      body: Localizations.override(
+        context: context,
+        locale: const Locale('en'),
+        delegates: const [
+          DefaultMaterialLocalizations.delegate,
+          DefaultWidgetsLocalizations.delegate,
+        ],
+        child: Theme(data: readableTheme, child: body),
+      ),
+    );
+  }
+}
+
+class _Section extends StatelessWidget {
+  final String title;
+  final Widget child;
+  final Widget? trailing;
+  final VoidCallback? onHeaderTap;
+
+  const _Section({
+    required this.title,
+    required this.child,
+    this.trailing,
+    this.onHeaderTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = dark ? const Color(0xFF1B2432) : const Color(0xFFF3F6FA);
+    final borderColor = dark
+        ? const Color(0xFF66758B)
+        : const Color(0xFFA7B3C4);
+    final titleColor = dark ? const Color(0xFFF8FAFC) : const Color(0xFF172033);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      elevation: 0,
+      color: cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: borderColor, width: 1.2),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: onHeaderTap,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: context.textTheme.titleMedium?.copyWith(
+                          color: titleColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    ?trailing,
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}

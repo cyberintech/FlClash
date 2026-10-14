@@ -5,6 +5,7 @@ on:
     branches:
       - vpn-policy-windows-preview
       - vpn-policy-c8f8-fix
+      - vpn-policy-global-09-20261014
   workflow_dispatch:
 
 concurrency:
@@ -12,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: '3.47.4'
-  GO_VERSION: '1.26.4'
+  FLUTTER_VERSION: '3.47.6'
+  GO_VERSION: '1.27.1'
 
 jobs:
   build-windows:
@@ -54,8 +55,25 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
+      - name: Focused VPN regression tests
+        shell: pwsh
+        run: |
+          $original = Get-Content pubspec.yaml -Raw
+          try {
+            $original.Replace('build_assets: true', 'build_assets: false') | Set-Content pubspec.yaml
+            flutter test test/features/vpn_policy_full_tunnel_test.dart test/features/vpn_policy_profile_bootstrap_test.dart test/features/vpn_policy_local_policy_test.dart test/providers/setup_action_test.dart test/database/migration_v1_to_v2_test.dart
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            $original | Set-Content pubspec.yaml
+          }
+
       - name: Build Windows release bundle
         run: flutter build windows --release
+
+      - name: Stamp VPN Policy build
+        shell: pwsh
+        run: |
+          "VPN Policy 0.9.0`nCommit: ${{ github.sha }}`nBuilt: $(Get-Date -Format o)" | Set-Content build/windows/x64/runner/Release/VPN-POLICY-BUILD.txt
 
       - name: Upload preview
         uses: actions/upload-artifact@v4

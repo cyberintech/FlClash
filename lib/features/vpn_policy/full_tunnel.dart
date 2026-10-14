@@ -1,22 +1,24 @@
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
 
-/// Global mode in our VPN fork means a real full tunnel, not merely
-/// "use GLOBAL for traffic that already happens to enter Mihomo".
 PatchClashConfig configureGlobalFullTunnel(
   PatchClashConfig state, {
   required bool isWindows,
 }) {
   return state.copyWith(
     mode: Mode.global,
-    tun: isWindows ? state.tun.copyWith(enable: true) : state.tun,
+    tun: isWindows
+        ? state.tun.copyWith(
+            enable: true,
+            autoRoute: true,
+            strictRoute: true,
+            routeAddress: const [],
+            routeExcludeAddress: const [],
+          )
+        : state.tun,
   );
 }
 
-/// VPN Policy is implemented with Mihomo rules, so Windows must capture all
-/// system traffic even when the policy contains only MATCH/domain rules and no
-/// PROCESS-NAME rules. Otherwise "all_vpn" is only global inside Mihomo, while
-/// non-proxy-aware applications never enter the core at all.
 PatchClashConfig configureVpnPolicyCapture(
   PatchClashConfig state, {
   required bool isWindows,
@@ -24,15 +26,13 @@ PatchClashConfig configureVpnPolicyCapture(
 }) {
   return state.copyWith(
     mode: Mode.rule,
-    findProcessMode:
-        hasProcessRules ? FindProcessMode.always : state.findProcessMode,
+    findProcessMode: hasProcessRules
+        ? FindProcessMode.always
+        : state.findProcessMode,
     tun: isWindows ? state.tun.copyWith(enable: true) : state.tun,
   );
 }
 
-/// Android's VpnService package allow/deny filter sits outside Mihomo. VPN
-/// Policy already performs split routing inside Mihomo, so a second Android
-/// app filter would make "Global" or policy rules silently miss applications.
 VpnProps configureAndroidFullCapture(
   VpnProps state, {
   required bool isAndroid,
@@ -42,4 +42,67 @@ VpnProps configureAndroidFullCapture(
     enable: true,
     accessControlProps: state.accessControlProps.copyWith(enable: false),
   );
+}
+
+String? globalVpnTarget(List<Group> groups, Map<String, String> selected) {
+  final global = groups.where((group) => group.name == 'GLOBAL').firstOrNull;
+  if (global == null) return null;
+  final byName = {for (final group in groups) group.name: group};
+  final visited = <String>{};
+  bool usesVpn(Proxy proxy) {
+    if (!visited.add(proxy.name)) return false;
+    final type = proxy.type.toLowerCase();
+    if (const {
+      'direct',
+      'reject',
+      'rejectdrop',
+      'reject-drop',
+      'pass',
+      'compatible',
+      'dns',
+      'rematch',
+    }.contains(type)) {
+      return false;
+    }
+    final group = byName[proxy.name];
+    if (group == null) return true;
+    final name = selected[group.name] ?? group.now ?? '';
+    final current = group.all.where((item) => item.name == name).firstOrNull;
+    return current != null && usesVpn(current);
+  }
+
+  final currentName = selected['GLOBAL'] ?? global.now;
+  for (final proxy in [
+    ...global.all.where((item) => item.name == currentName),
+    ...global.all.where((item) => item.name != currentName),
+  ]) {
+    visited.clear();
+    if (usesVpn(proxy)) return proxy.name;
+  }
+  return null;
+}
+
+String? globalVpnConfigTarget(
+  Map<String, dynamic> config,
+  Map<String, String> selected,
+) {
+  final proxies = config['proxies'];
+  if (proxies is! List) return null;
+  final candidates = <String>[];
+  for (final proxy in proxies) {
+    if (proxy is! Map || proxy['type'] is! String || proxy['name'] is! String) {
+      continue;
+    }
+    if (!const {
+      'direct',
+      'reject',
+      'dns',
+      'rematch',
+    }.contains((proxy['type'] as String).toLowerCase())) {
+      candidates.add(proxy['name'] as String);
+    }
+  }
+  return candidates.where((name) => name == selected['GLOBAL']).firstOrNull ??
+      candidates.where(selected.values.contains).firstOrNull ??
+      candidates.firstOrNull;
 }
