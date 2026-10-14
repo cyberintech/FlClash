@@ -5,6 +5,7 @@ on:
     branches:
       - vpn-policy-windows-preview
       - vpn-policy-c8f8-fix
+      - vpn-policy-global-09-20261014
   workflow_dispatch:
 
 concurrency:
@@ -12,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FLUTTER_VERSION: '3.47.4'
-  GO_VERSION: '1.26.4'
+  FLUTTER_VERSION: '3.47.6'
+  GO_VERSION: '1.27.1'
   NDK_VERSION: r28c
 
 jobs:
