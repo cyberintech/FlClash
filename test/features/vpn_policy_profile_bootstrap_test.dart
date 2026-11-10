@@ -6,6 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yaml/yaml.dart';
 
 void main() {
+  test('invalid YAML is left for the normal config validator', () {
+    expect(parseVpnPolicyProfileBootstrap(Uint8List.fromList(utf8.encode('bad: ['))), isNull);
+  });
   test('extracts VPN Policy bootstrap metadata and strips it from config', () {
     final input = '''
 x-vpn-policy:

@@ -11,6 +11,7 @@ class VpnPolicySettings {
   final String vpnTarget;
   final String lastRevision;
   final String lastPolicyName;
+  final bool sharedRules;
   final String localMode;
   final List<String> localAppSelectors;
   final List<String> localDomains;
@@ -21,6 +22,7 @@ class VpnPolicySettings {
     this.vpnTarget = '',
     this.lastRevision = '',
     this.lastPolicyName = '',
+    this.sharedRules = false,
     this.localMode = 'only_selected',
     this.localAppSelectors = const [],
     this.localDomains = const [],
@@ -33,6 +35,7 @@ class VpnPolicySettings {
       vpnTarget: json['vpnTarget']?.toString() ?? '',
       lastRevision: json['lastRevision']?.toString() ?? '',
       lastPolicyName: json['lastPolicyName']?.toString() ?? '',
+      sharedRules: json['sharedRules'] == true,
       localMode: json['localMode']?.toString() ?? 'only_selected',
       localAppSelectors: (json['localAppSelectors'] as List? ?? const [])
           .map((value) => value.toString())
@@ -49,6 +52,7 @@ class VpnPolicySettings {
     String? vpnTarget,
     String? lastRevision,
     String? lastPolicyName,
+    bool? sharedRules,
     String? localMode,
     List<String>? localAppSelectors,
     List<String>? localDomains,
@@ -59,6 +63,7 @@ class VpnPolicySettings {
       vpnTarget: vpnTarget ?? this.vpnTarget,
       lastRevision: lastRevision ?? this.lastRevision,
       lastPolicyName: lastPolicyName ?? this.lastPolicyName,
+      sharedRules: sharedRules ?? this.sharedRules,
       localMode: localMode ?? this.localMode,
       localAppSelectors: localAppSelectors ?? this.localAppSelectors,
       localDomains: localDomains ?? this.localDomains,
@@ -71,6 +76,7 @@ class VpnPolicySettings {
     'vpnTarget': vpnTarget,
     'lastRevision': lastRevision,
     'lastPolicyName': lastPolicyName,
+    'sharedRules': sharedRules,
     'localMode': localMode,
     'localAppSelectors': localAppSelectors,
     'localDomains': localDomains,
@@ -138,7 +144,10 @@ class VpnPolicySettingsStore {
       await saveConnection(serviceUrl: serviceUrl, deviceKey: deviceKey);
     }
 
-    return profile.copyWith(serviceUrl: serviceUrl, deviceKey: deviceKey);
+    return profile.copyWith(
+      serviceUrl: profile.serviceUrl.isNotEmpty ? profile.serviceUrl : serviceUrl,
+      deviceKey: profile.deviceKey.isNotEmpty ? profile.deviceKey : deviceKey,
+    );
   }
 
   Future<void> save(int profileId, VpnPolicySettings settings) async {

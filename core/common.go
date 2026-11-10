@@ -423,6 +423,7 @@ func applyConfig(params *SetupParams) error {
 	patchSelectGroup(params.SelectedMap)
 	bumpRouteEpoch()
 	updateListeners(cfg)
+	resetAutoFailureWatch()
 	reconcileGeoUpdater()
 	return err
 }

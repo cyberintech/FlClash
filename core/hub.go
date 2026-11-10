@@ -65,10 +65,12 @@ func handleStartListener() bool {
 	updateListeners(currentConfig)
 	resolver.ResetConnection()
 	refreshRoute()
+	startAutoFailureWatch()
 	return true
 }
 
 func handleStopListener() bool {
+	stopAutoFailureWatch()
 	configMu.Lock()
 	defer configMu.Unlock()
 	isRunning.Store(false)
@@ -93,6 +95,7 @@ func handleForceGC() {
 func handleShutdown() bool {
 	handleStopLog()
 	stopRouteWatch()
+	stopAutoFailureWatch()
 
 	configMu.Lock()
 	isRunning.Store(false)

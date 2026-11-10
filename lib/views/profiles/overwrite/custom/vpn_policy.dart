@@ -477,6 +477,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       vpnTarget: target,
       appSelectors: appSelectors,
       domains: domains,
+      inheritShared: _settings.sharedRules,
     );
 
     setState(() {

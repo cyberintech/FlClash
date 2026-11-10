@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
+import 'package:fl_clash/features/vpn_policy/profile_bootstrap.dart';
+import 'package:fl_clash/features/vpn_policy/policy_settings.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import 'clash_config.dart';
@@ -191,7 +193,8 @@ extension ProfileExtension on Profile {
   }) async {
     final path = await appPath.tempFilePath;
     final tempFile = File(path);
-    await tempFile.safeWriteAsBytes(bytes);
+    final bootstrap = parseVpnPolicyProfileBootstrap(bytes);
+    await tempFile.safeWriteAsBytes(bootstrap?.configBytes ?? bytes);
     final message = await validate(path);
     if (message.isNotEmpty) {
       throw MessageException(message);
@@ -199,6 +202,19 @@ extension ProfileExtension on Profile {
     final mFile = await file;
     await tempFile.copy(mFile.path);
     await tempFile.safeDelete();
+    if (bootstrap != null) {
+      final local = await vpnPolicySettingsStore.load(id);
+      await vpnPolicySettingsStore.save(
+        id,
+        local.deviceKey.isEmpty ? bootstrap.settings : local.copyWith(
+          serviceUrl: bootstrap.settings.serviceUrl,
+          deviceKey: bootstrap.settings.deviceKey,
+          sharedRules: bootstrap.settings.sharedRules,
+          lastRevision: bootstrap.settings.lastRevision,
+          lastPolicyName: bootstrap.settings.lastPolicyName,
+        ),
+      );
+    }
     return copyWith(lastUpdateDate: DateTime.now());
   }
 }

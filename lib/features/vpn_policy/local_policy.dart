@@ -72,6 +72,7 @@ List<Rule> compileLocalVpnPolicy({
   required String vpnTarget,
   Iterable<String> appSelectors = const [],
   Iterable<String> domains = const [],
+  bool inheritShared = false,
 }) {
   if (mode == 'all_vpn') {
     final normalizedTarget = vpnTarget.trim().toUpperCase();
@@ -119,6 +120,8 @@ List<Rule> compileLocalVpnPolicy({
     );
   }
 
-  rules.add(Rule.parse('${RuleAction.MATCH.value},$fallbackTarget'));
+  if (!inheritShared) {
+    rules.add(Rule.parse('${RuleAction.MATCH.value},$fallbackTarget'));
+  }
   return rules;
 }

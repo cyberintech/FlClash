@@ -13,6 +13,22 @@ void main() {
     await store.clear();
   });
 
+  test('two explicitly bound profiles retain their own credentials', () async {
+    await vpnPolicySettingsStore.save(7, const VpnPolicySettings(
+      serviceUrl: 'https://one.example', deviceKey: 'key-one', sharedRules: true,
+      localDomains: ['local.example'],
+    ));
+    await vpnPolicySettingsStore.save(8, const VpnPolicySettings(
+      serviceUrl: 'https://two.example', deviceKey: 'key-two',
+    ));
+    final first = await vpnPolicySettingsStore.load(7);
+    final second = await vpnPolicySettingsStore.load(8);
+    expect(first.deviceKey, 'key-one');
+    expect(first.serviceUrl, 'https://one.example');
+    expect(first.sharedRules, isTrue);
+    expect(first.localDomains, ['local.example']);
+    expect(second.deviceKey, 'key-two');
+  });
   test('defaults to empty settings', () async {
     final settings = await vpnPolicySettingsStore.load(7);
 

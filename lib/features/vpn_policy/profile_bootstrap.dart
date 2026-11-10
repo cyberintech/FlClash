@@ -30,7 +30,12 @@ Object? _plainYaml(Object? value) {
 
 VpnPolicyProfileBootstrap? parseVpnPolicyProfileBootstrap(Uint8List bytes) {
   final text = utf8.decode(bytes);
-  final loaded = yaml_parser.loadYaml(text);
+  Object? loaded;
+  try {
+    loaded = yaml_parser.loadYaml(text);
+  } on yaml_parser.YamlException {
+    return null;
+  }
   if (loaded is! yaml_parser.YamlMap) {
     return null;
   }
@@ -72,6 +77,7 @@ VpnPolicyProfileBootstrap? parseVpnPolicyProfileBootstrap(Uint8List bytes) {
       deviceKey: deviceKey,
       lastRevision: meta['revision']?.toString() ?? '',
       lastPolicyName: meta['policy-name']?.toString() ?? '',
+      sharedRules: meta['shared-rules'] == true,
       localMode: meta['mode']?.toString() ?? 'only_selected',
       localAppSelectors: strings(meta['app-selectors']),
       localDomains: strings(meta['domains']),

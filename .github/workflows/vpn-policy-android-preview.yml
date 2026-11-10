@@ -65,6 +65,13 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
+      - name: Test managed profiles and local rule inheritance
+        run: flutter test test/features/vpn_policy_local_policy_test.dart test/features/vpn_policy_settings_test.dart test/features/vpn_policy_profile_bootstrap_test.dart test/models/profile_save_test.dart
+
+      - name: Test core failover
+        working-directory: core
+        run: go test . -run 'TestFailedAutoPath|TestOnlyFailedAuto|TestAutoFailureWatch' -count=1
+
       - name: Build Android arm64 debug APK
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
