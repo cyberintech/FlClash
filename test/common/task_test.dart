@@ -10,6 +10,39 @@ import 'package:yaml/yaml.dart';
 int _double(int value) => value * 2;
 
 void main() {
+  test('managed local rules survive a shared-profile refresh without hiding providers', () async {
+    Future<YamlMap> build(String revision) async {
+      final result = await makeRealProfileTask(
+        MakeRealProfileState(
+          profilesPath: '/profiles', profileId: 70,
+          rawConfig: {
+            'rule-providers': {
+              'VPN-Shared-Direct': {'type': 'http', 'url': 'https://policy.example/direct?rev=$revision'},
+              'VPN-Shared-VPN': {'type': 'http', 'url': 'https://policy.example/vpn?rev=$revision'},
+            },
+            'rules': ['RULE-SET,VPN-Shared-Direct,DIRECT', 'RULE-SET,VPN-Shared-VPN,VPN', 'MATCH,DIRECT'],
+          },
+          realPatchConfig: const PatchClashConfig(),
+          overrideDns: false, overrideNtp: false, appendSystemDns: false,
+          proxyGroups: const [], addedRules: const [],
+          rules: const [Rule(ruleAction: RuleAction.DOMAIN_SUFFIX, content: 'local.example', ruleTarget: 'DIRECT')],
+          defaultUA: 'FlClash-Test',
+        ),
+      );
+      return loadYaml(result.yaml) as YamlMap;
+    }
+    final first = await build('one');
+    final refreshed = await build('two');
+    expect(first['rules'], [
+      'DOMAIN-SUFFIX,local.example,DIRECT',
+      'RULE-SET,VPN-Shared-Direct,DIRECT',
+      'RULE-SET,VPN-Shared-VPN,VPN',
+      'MATCH,DIRECT',
+    ]);
+    expect(refreshed['rules'], first['rules']);
+    expect(refreshed['rule-providers']['VPN-Shared-VPN']['url'], endsWith('rev=two'));
+  });
+
   test('encoding helpers round-trip structured data', () async {
     final encoded = await encodeJSONTask({
       'name': 'FlClash',

@@ -178,12 +178,16 @@ extension ProfileExtension on Profile {
     final response = await request.getFileResponseForUrl(url);
     final disposition = response.headers.value('content-disposition');
     final userinfo = response.headers.value('subscription-userinfo');
+    final updateHours = int.tryParse(response.headers.value('profile-update-interval') ?? '');
     return copyWith(
       label: label.takeFirstValid([
         getFileNameForDisposition(disposition),
         id.toString(),
       ]),
       subscriptionInfo: SubscriptionInfo.formHString(userinfo),
+      autoUpdateDuration: updateHours != null && updateHours >= 1 && updateHours <= 168
+          ? Duration(hours: updateHours)
+          : autoUpdateDuration,
     ).saveFile(response.data ?? Uint8List.fromList([]), validate: validate);
   }
 

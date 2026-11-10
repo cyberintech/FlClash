@@ -66,7 +66,7 @@ jobs:
         run: flutter analyze --no-fatal-infos
 
       - name: Test managed profiles and local rule inheritance
-        run: flutter test test/features/vpn_policy_local_policy_test.dart test/features/vpn_policy_settings_test.dart test/features/vpn_policy_profile_bootstrap_test.dart test/models/profile_save_test.dart
+        run: flutter test test/common/task_test.dart test/features/vpn_policy_local_policy_test.dart test/features/vpn_policy_settings_test.dart test/features/vpn_policy_profile_bootstrap_test.dart test/models/profile_save_test.dart
 
       - name: Test core failover
         working-directory: core

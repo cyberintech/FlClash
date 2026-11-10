@@ -338,7 +338,17 @@ Future<({String yaml, String md5})> _makeRealProfileTask(
       rules = [...finalAddedRules, ...rules];
     }
   } else {
-    rules = data.rules.map((item) => item.rawValue).toList();
+    final localRules = data.rules.map((item) => item.rawValue).toList();
+    final sharedProviders = rawConfig['rule-providers'];
+    final inheritsSharedPolicy =
+        sharedProviders is Map &&
+        sharedProviders.containsKey('VPN-Shared-Direct') &&
+        sharedProviders.containsKey('VPN-Shared-VPN');
+    rules = [
+      ...localRules,
+      if (inheritsSharedPolicy)
+        ...List<String>.from(rawConfig['rules'] ?? const <String>[]),
+    ];
   }
   if (data.proxies.isNotEmpty) {
     rawConfig['proxies'] = data.proxies.map((item) => item.definition).toList();
