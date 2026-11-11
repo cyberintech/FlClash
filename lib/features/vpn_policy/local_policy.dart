@@ -57,8 +57,8 @@ List<String> inferLocalAppSelectorsFromRules({
       'exclude_selected' => target == RuleTarget.DIRECT.value,
       _ =>
         target != RuleTarget.DIRECT.value &&
-        target != RuleTarget.REJECT.value &&
-        target != RuleTarget.REJECT_DROP.value,
+            target != RuleTarget.REJECT.value &&
+            target != RuleTarget.REJECT_DROP.value,
     };
     if (selected) {
       selectors.add(selector);
@@ -80,8 +80,7 @@ List<Rule> compileLocalVpnPolicy({
         normalizedTarget == 'NUE-VLESS' ||
         normalizedTarget == 'NUE-VLESS-REALITY';
     return [
-      if (isNue)
-        Rule.parse('AND,((NETWORK,UDP),(DST-PORT,443)),REJECT'),
+      if (isNue) Rule.parse('AND,((NETWORK,UDP),(DST-PORT,443)),REJECT'),
       Rule.parse('MATCH,$vpnTarget'),
     ];
   }

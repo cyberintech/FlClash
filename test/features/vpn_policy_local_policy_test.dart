@@ -3,24 +3,34 @@ import 'package:fl_clash/models/clash_config.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('shared rules keep local exceptions without replacing global fallback', () {
-    final rules = compileLocalVpnPolicy(
-      mode: 'exclude_selected',
-      vpnTarget: 'VPN',
-      appSelectors: const ['ru.oneme.app'],
-      inheritShared: true,
-    );
-    expect(rules.map((r) => r.rawValue), ['PROCESS-NAME,ru.oneme.app,DIRECT']);
-  });
-  test('shared rules keep local additions without freezing the shared policy', () {
-    final rules = compileLocalVpnPolicy(
-      mode: 'only_selected',
-      vpnTarget: 'VPN',
-      domains: const ['custom.example'],
-      inheritShared: true,
-    );
-    expect(rules.map((r) => r.rawValue), ['DOMAIN-SUFFIX,custom.example,VPN']);
-  });
+  test(
+    'shared rules keep local exceptions without replacing global fallback',
+    () {
+      final rules = compileLocalVpnPolicy(
+        mode: 'exclude_selected',
+        vpnTarget: 'VPN',
+        appSelectors: const ['ru.oneme.app'],
+        inheritShared: true,
+      );
+      expect(rules.map((r) => r.rawValue), [
+        'PROCESS-NAME,ru.oneme.app,DIRECT',
+      ]);
+    },
+  );
+  test(
+    'shared rules keep local additions without freezing the shared policy',
+    () {
+      final rules = compileLocalVpnPolicy(
+        mode: 'only_selected',
+        vpnTarget: 'VPN',
+        domains: const ['custom.example'],
+        inheritShared: true,
+      );
+      expect(rules.map((r) => r.rawValue), [
+        'DOMAIN-SUFFIX,custom.example,VPN',
+      ]);
+    },
+  );
   test('only selected routes apps and domains to VPN with DIRECT fallback', () {
     final rules = compileLocalVpnPolicy(
       mode: 'only_selected',

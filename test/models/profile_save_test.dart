@@ -4,9 +4,11 @@ import 'dart:typed_data';
 
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/features/vpn_policy/policy_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/app_paths.dart';
+import '../helpers/preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +27,49 @@ void main() {
   });
 
   group('Profile.saveFile', () {
+    test(
+      'managed refresh keeps local exceptions and installs provider metadata',
+      () async {
+        await mockPreferences({});
+        final profile = Profile.normal(label: 'managed');
+        await vpnPolicySettingsStore.save(
+          profile.id,
+          const VpnPolicySettings(
+            serviceUrl: 'https://old.example',
+            deviceKey: 'old-key',
+            localDomains: ['local.example'],
+            localRules: ['DOMAIN-SUFFIX,local.example,DIRECT'],
+          ),
+        );
+        final bytes = Uint8List.fromList(
+          utf8.encode('''
+x-vpn-policy:
+  service-url: https://new.example
+  device-key: new-key
+  shared-rules: true
+  vpn-target: VPN
+rules: ["MATCH,DIRECT"]
+'''),
+        );
+        await profile.saveFile(
+          bytes,
+          validate: (path, _) async {
+            expect(
+              await File(path).readAsString(),
+              isNot(contains('x-vpn-policy')),
+            );
+            return null;
+          },
+        );
+        final settings = await vpnPolicySettingsStore.load(profile.id);
+        expect(settings.deviceKey, 'new-key');
+        expect(settings.vpnTarget, 'VPN');
+        expect(settings.sharedRules, isTrue);
+        expect(settings.localDomains, ['local.example']);
+        expect(settings.localRules, ['DOMAIN-SUFFIX,local.example,DIRECT']);
+      },
+    );
+
     // EditProfileView relies on this throwing rather than silently
     // succeeding, so a caller-level try/catch can surface the failure.
     test('rejects an invalid config without touching the saved file', () async {

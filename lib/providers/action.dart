@@ -14,7 +14,6 @@ import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/features/vpn_policy/policy_settings.dart';
 import 'package:fl_clash/features/vpn_policy/local_policy.dart';
 import 'package:fl_clash/features/vpn_policy/provider_cache.dart';
-import 'package:fl_clash/features/vpn_policy/profile_bootstrap.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/plugins/app.dart';
 import 'package:fl_clash/plugins/service.dart';

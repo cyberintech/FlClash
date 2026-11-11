@@ -6,11 +6,34 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yaml/yaml.dart';
 
 void main() {
+  test(
+    'shared profile defaults to VPN without copying shared rules into overrides',
+    () {
+      final parsed = parseVpnPolicyProfileBootstrap(
+        Uint8List.fromList(
+          utf8.encode('''
+x-vpn-policy:
+  format-version: 2
+  shared-rules: true
+  service-url: https://policy.example
+  device-key: new-device
+rules: ["RULE-SET,VPN-Shared-VPN,VPN", "MATCH,DIRECT"]
+'''),
+        ),
+      );
+      expect(parsed!.settings.vpnTarget, 'VPN');
+      expect(parsed.settings.sharedRules, isTrue);
+      expect(parsed.settings.localRules, isEmpty);
+    },
+  );
   test('invalid YAML is left for the normal config validator', () {
-    expect(parseVpnPolicyProfileBootstrap(Uint8List.fromList(utf8.encode('bad: ['))), isNull);
+    expect(
+      parseVpnPolicyProfileBootstrap(Uint8List.fromList(utf8.encode('bad: ['))),
+      isNull,
+    );
   });
   test('extracts VPN Policy bootstrap metadata and strips it from config', () {
-    final input = '''
+    const input = '''
 x-vpn-policy:
   service-url: https://cyberintellect.tech/vpn-policy
   device-key: vp1_test

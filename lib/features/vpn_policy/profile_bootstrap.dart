@@ -50,8 +50,7 @@ VpnPolicyProfileBootstrap? parseVpnPolicyProfileBootstrap(Uint8List bytes) {
   }
 
   final meta = {
-    for (final entry in metadata.entries)
-      entry.key.toString(): entry.value,
+    for (final entry in metadata.entries) entry.key.toString(): entry.value,
   };
   final serviceUrl = meta['service-url']?.toString().trim() ?? '';
   final deviceKey = meta['device-key']?.toString().trim() ?? '';
@@ -64,17 +63,17 @@ VpnPolicyProfileBootstrap? parseVpnPolicyProfileBootstrap(Uint8List bytes) {
       .where((item) => item.trim().isNotEmpty)
       .toList(growable: false);
 
-  final config = Map<String, Object?>.from(plain)
-    ..remove('x-vpn-policy');
-  final cleaned = Uint8List.fromList(
-    utf8.encode(yaml.encode(config)),
-  );
+  final config = Map<String, Object?>.from(plain)..remove('x-vpn-policy');
+  final cleaned = Uint8List.fromList(utf8.encode(yaml.encode(config)));
 
   return VpnPolicyProfileBootstrap(
     configBytes: cleaned,
     settings: VpnPolicySettings(
       serviceUrl: serviceUrl,
       deviceKey: deviceKey,
+      vpnTarget:
+          meta['vpn-target']?.toString() ??
+          (meta['shared-rules'] == true ? 'VPN' : ''),
       lastRevision: meta['revision']?.toString() ?? '',
       lastPolicyName: meta['policy-name']?.toString() ?? '',
       sharedRules: meta['shared-rules'] == true,

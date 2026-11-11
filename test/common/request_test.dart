@@ -156,9 +156,9 @@ void main() {
     Request requestServing(String sums, List<int> asset) {
       return Request()
         ..releaseDio.httpClientAdapter = _PathAdapter({
-          '/$repository/releases/download/v1.2.3/SHA256SUMS': () =>
+          '/$updateRepository/releases/download/v1.2.3/SHA256SUMS': () =>
               ResponseBody.fromString(sums, 200),
-          '/$repository/releases/download/v1.2.3/$name': () =>
+          '/$updateRepository/releases/download/v1.2.3/$name': () =>
               ResponseBody.fromBytes(asset, 200),
         });
     }

@@ -182,7 +182,9 @@ class CommonAction extends _$CommonAction {
 
   void _openReleasePage() {
     unawaited(
-      launchUrl(Uri.parse('https://github.com/$updateRepository/releases/latest')),
+      launchUrl(
+        Uri.parse('https://github.com/$updateRepository/releases/latest'),
+      ),
     );
   }
 

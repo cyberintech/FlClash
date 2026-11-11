@@ -189,14 +189,17 @@ extension ProfileExtension on Profile {
     final response = await request.getFileResponseForUrl(url);
     final disposition = response.headers.value('content-disposition');
     final userinfo = response.headers.value('subscription-userinfo');
-    final updateHours = int.tryParse(response.headers.value('profile-update-interval') ?? '');
+    final updateHours = int.tryParse(
+      response.headers.value('profile-update-interval') ?? '',
+    );
     return copyWith(
       label: label.takeFirstValid([
         getFileNameForDisposition(disposition),
         defaultLabel,
       ]),
       subscriptionInfo: SubscriptionInfo.formHString(userinfo),
-      autoUpdateDuration: updateHours != null && updateHours >= 1 && updateHours <= 168
+      autoUpdateDuration:
+          updateHours != null && updateHours >= 1 && updateHours <= 168
           ? Duration(hours: updateHours)
           : autoUpdateDuration,
     ).saveFile(
@@ -223,13 +226,18 @@ extension ProfileExtension on Profile {
       final local = await vpnPolicySettingsStore.load(id);
       await vpnPolicySettingsStore.save(
         id,
-        local.deviceKey.isEmpty ? bootstrap.settings : local.copyWith(
-          serviceUrl: bootstrap.settings.serviceUrl,
-          deviceKey: bootstrap.settings.deviceKey,
-          sharedRules: bootstrap.settings.sharedRules,
-          lastRevision: bootstrap.settings.lastRevision,
-          lastPolicyName: bootstrap.settings.lastPolicyName,
-        ),
+        local.deviceKey.isEmpty
+            ? bootstrap.settings
+            : local.copyWith(
+                vpnTarget: local.vpnTarget.isEmpty
+                    ? bootstrap.settings.vpnTarget
+                    : local.vpnTarget,
+                serviceUrl: bootstrap.settings.serviceUrl,
+                deviceKey: bootstrap.settings.deviceKey,
+                sharedRules: bootstrap.settings.sharedRules,
+                lastRevision: bootstrap.settings.lastRevision,
+                lastPolicyName: bootstrap.settings.lastPolicyName,
+              ),
       );
     }
     return copyWith(lastUpdateDate: DateTime.now());

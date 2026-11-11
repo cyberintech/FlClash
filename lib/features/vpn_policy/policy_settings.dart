@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:fl_clash/common/common.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 String _vpnPolicySettingsKey(int profileId) => 'vpn_policy_settings_$profileId';
 const _vpnPolicyConnectionKey = 'vpn_policy_connection_v1';
@@ -42,7 +42,9 @@ class VpnPolicySettings {
       localAppSelectors: (json['localAppSelectors'] as List? ?? const [])
           .map((value) => value.toString())
           .toList(growable: false),
-      localRules: (json['localRules'] as List? ?? const []).map((value) => value.toString()).toList(growable: false),
+      localRules: (json['localRules'] as List? ?? const [])
+          .map((value) => value.toString())
+          .toList(growable: false),
       localDomains: (json['localDomains'] as List? ?? const [])
           .map((value) => value.toString())
           .toList(growable: false),
@@ -90,6 +92,14 @@ class VpnPolicySettings {
 }
 
 class VpnPolicySettingsStore {
+  Future<SharedPreferences?> _open() async {
+    try {
+      return await SharedPreferences.getInstance();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Map<String, String> _decodeConnection(String? raw) {
     if (raw == null || raw.isEmpty) {
       return const {'serviceUrl': '', 'deviceKey': ''};
@@ -109,7 +119,7 @@ class VpnPolicySettingsStore {
     required String serviceUrl,
     required String deviceKey,
   }) async {
-    final shared = await preferences.sharedPreferencesCompleter.future;
+    final shared = await _open();
     await shared?.setString(
       _vpnPolicyConnectionKey,
       json.encode({
@@ -120,7 +130,7 @@ class VpnPolicySettingsStore {
   }
 
   Future<VpnPolicySettings> load(int profileId) async {
-    final shared = await preferences.sharedPreferencesCompleter.future;
+    final shared = await _open();
     VpnPolicySettings profile = const VpnPolicySettings();
     final raw = shared?.getString(_vpnPolicySettingsKey(profileId));
     if (raw != null && raw.isNotEmpty) {
@@ -151,13 +161,15 @@ class VpnPolicySettingsStore {
     }
 
     return profile.copyWith(
-      serviceUrl: profile.serviceUrl.isNotEmpty ? profile.serviceUrl : serviceUrl,
+      serviceUrl: profile.serviceUrl.isNotEmpty
+          ? profile.serviceUrl
+          : serviceUrl,
       deviceKey: profile.deviceKey.isNotEmpty ? profile.deviceKey : deviceKey,
     );
   }
 
   Future<void> save(int profileId, VpnPolicySettings settings) async {
-    final shared = await preferences.sharedPreferencesCompleter.future;
+    final shared = await _open();
     await Future.wait([
       shared?.setString(
             _vpnPolicySettingsKey(profileId),

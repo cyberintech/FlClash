@@ -109,7 +109,7 @@ class Request {
     final release = await latestRelease();
     final remoteVersion = release['tag_name'] as String;
     final info = globalState.packageInfo;
-      final version = '${info.version.split('+').first}+${info.buildNumber}';
+    final version = '${info.version.split('+').first}+${info.buildNumber}';
     final hasUpdate =
         compareVersions(remoteVersion.replaceAll('v', ''), version) > 0;
     return hasUpdate ? release : null;
@@ -130,7 +130,7 @@ class Request {
       );
     }
     final response = await dio.get<void>(
-      'https://github.com/$repository/releases/latest',
+      'https://github.com/$updateRepository/releases/latest',
       options: Options(
         followRedirects: false,
         validateStatus: (status) => status != null && status < 400,

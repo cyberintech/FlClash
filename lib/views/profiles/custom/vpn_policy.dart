@@ -14,9 +14,7 @@ import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/widgets.dart';
-import 'package:prism_ui/prism_ui.dart';
-import 'package:fl_clash/ui/ui.dart';
-import 'package:flutter/services.dart';
+import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class VpnPolicyView extends ConsumerStatefulWidget {
@@ -109,10 +107,16 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       return;
     }
     try {
-      final raw = await ref.read(coreHandlerProvider).readConfig(widget.profileId);
+      final raw = await ref
+          .read(coreHandlerProvider)
+          .readConfig(widget.profileId);
       final groups = raw['proxy-groups'];
       if (groups is List) {
-        _availableTargets = [for (final group in groups) if (group is Map && group['name'] is String) group['name'] as String];
+        _availableTargets = [
+          for (final group in groups)
+            if (group is Map && group['name'] is String)
+              group['name'] as String,
+        ];
       }
     } catch (_) {}
     _urlController.text = settings.serviceUrl;
@@ -150,8 +154,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       final mergedSelectors = {
         ..._selectedCustomApps,
         ...recoveredSelectors,
-      }.toList()
-        ..sort();
+      }.toList()..sort();
       if (mergedSelectors.length == _selectedCustomApps.length &&
           mergedSelectors.every(_selectedCustomApps.contains)) {
         return;
@@ -192,12 +195,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           return;
         }
         setState(() {
-          _androidPackages =
-              packages.where((item) => item.internet).toList()
-                ..sort(
-                  (a, b) =>
-                      a.label.toLowerCase().compareTo(b.label.toLowerCase()),
-                );
+          _androidPackages = packages.where((item) => item.internet).toList()
+            ..sort(
+              (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+            );
           _installedAppsPermissionGranted = granted;
         });
       } else if (Platform.isWindows) {
@@ -283,13 +284,20 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
 
   List<String> _ruleTargets() => List<String>.from(_availableTargets);
   Future<void> _applyRulesToRuntimeIfRunning() async {
-    if (ref.read(currentProfileIdProvider) != widget.profileId || !ref.read(isStartProvider)) return;
+    if (ref.read(currentProfileIdProvider) != widget.profileId ||
+        !ref.read(isStartProvider)) {
+      return;
+    }
     await ref.read(setupActionProvider.notifier).applyProfile(force: true);
   }
+
   Future<void> _replaceLocalRules(List<Rule> rules) async {
-    _settings = _settings.copyWith(localRules: rules.map((rule) => rule.rawValue).toList());
+    _settings = _settings.copyWith(
+      localRules: rules.map((rule) => rule.rawValue).toList(),
+    );
     await vpnPolicySettingsStore.save(widget.profileId, _settings);
   }
+
   void _configureProcessRouting(Iterable<Rule> rules) {
     final hasProcessRules = rules.any(
       (rule) => const {
@@ -444,10 +452,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       _assignmentError = null;
     });
     try {
-      final payload = await vpnPolicyClient.fetch(
-        settings,
-        vpnTarget: 'VPN',
-      );
+      final payload = await vpnPolicyClient.fetch(settings, vpnTarget: 'VPN');
       if (!mounted) {
         return;
       }
@@ -578,17 +583,14 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           if (!configured)
             Text(
               'Enter Device Key below to identify this installation on the server.',
-              style: AppTextStyle.body.of(context).copyWith(
-                color: context.colorScheme.onSurfaceVariant,
-              ),
+              style: AppTextStyle.body
+                  .of(context)
+                  .copyWith(color: context.colorScheme.onSurfaceVariant),
             )
           else if (_assignmentLoading)
             const Row(
               children: [
-                SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+                SizedBox.square(dimension: 18, child: ActivityIndicator()),
                 SizedBox(width: 10),
                 Text('Checking server identity...'),
               ],
@@ -596,33 +598,28 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           else if (error != null)
             Text(
               'Server identity check failed: $error',
-              style: AppTextStyle.body.of(context).copyWith(
-                color: context.colorScheme.error,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppTextStyle.body
+                  .of(context)
+                  .copyWith(color: context.colorScheme.error),
             )
           else if (assigned != null) ...[
             Text(
               'This client authenticates as: ${assigned.deviceName}',
-              style: AppTextStyle.headline.of(context).copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: AppTextStyle.headline.of(context).copyWith(),
             ),
             const SizedBox(height: 4),
             Text(
               '${assigned.platform} · device policy #${assigned.policyId}',
-              style: AppTextStyle.caption1.of(context).copyWith(
-                color: context.colorScheme.onSurfaceVariant,
-              ),
+              style: AppTextStyle.caption1
+                  .of(context)
+                  .copyWith(color: context.colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
             Text(
               assigned.policyId == 0
                   ? 'No server policy is assigned to this device.'
                   : 'Assigned policy: ${assigned.policyName}',
-              style: AppTextStyle.body.of(context).copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: AppTextStyle.body.of(context).copyWith(),
             ),
             if (assigned.policyId != 0) ...[
               const SizedBox(height: 4),
@@ -630,12 +627,12 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 '${assigned.apps.length} semantic apps · '
                 '${assigned.services.length} services · '
                 '${assigned.customDomains.length} custom domains',
-                style: AppTextStyle.caption1.of(context).copyWith(
-                  color: context.colorScheme.onSurfaceVariant,
-                ),
+                style: AppTextStyle.caption1
+                    .of(context)
+                    .copyWith(color: context.colorScheme.onSurfaceVariant),
               ),
               const SizedBox(height: 10),
-              FilledButton.tonal(
+              FilledButton(
                 onPressed: _busy
                     ? null
                     : () => _importAssignedPolicyAndApply(targets),
@@ -648,13 +645,14 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             onPressed: configured && !_assignmentLoading
                 ? _loadAssignedPolicy
                 : null,
-            icon: const Icon(Icons.refresh),
+            icon: const GlyphIcon(AppGlyphs.sync),
             label: const Text('Refresh server identity'),
           ),
         ],
       ),
     );
   }
+
   Future<void> _loadServerRuleSets(List<String> targets) async {
     final settings = _connectionSettings(targets);
     if (settings == null) {
@@ -708,8 +706,14 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     if (!mounted) {
       return;
     }
-    final addedApps = _localAppSelectors().toSet().difference(beforeApps).length;
-    final addedDomains = _localDomains().toSet().difference(beforeDomains).length;
+    final addedApps = _localAppSelectors()
+        .toSet()
+        .difference(beforeApps)
+        .length;
+    final addedDomains = _localDomains()
+        .toSet()
+        .difference(beforeDomains)
+        .length;
     setState(() {
       _status =
           'Imported ${ruleSet.name}: +$addedDomains domains, +$addedApps apps';
@@ -738,7 +742,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       final catalog = results[0] as VpnPolicyCatalog;
       final payload = results[1] as VpnPolicyPayload;
       if (applyRules) {
-          await _replaceLocalRules(payload.rules);
+        await _replaceLocalRules(payload.rules);
         _configureProcessRouting(payload.rules);
       }
       await _applyRemoteState(settings, catalog, payload);
@@ -765,7 +769,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     VpnPolicyCatalog catalog,
     VpnPolicyPayload payload,
   ) async {
+    final current = await vpnPolicySettingsStore.load(widget.profileId);
     final next = settings.copyWith(
+      localRules: current.localRules,
       lastRevision: payload.revision,
       lastPolicyName: payload.policyName,
     );
@@ -819,14 +825,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         apps: _selectedApps.toList()..sort(),
         services: _selectedServices.toList()..sort(),
         customDomains: List<String>.from(_customDomains),
-        customAppSelectors:
-            _selectedCustomApps
-                .where((selector) {
-                  final semantic = _catalog?.selectorToAppKey[selector];
-                  return semantic == null || !_selectedApps.contains(semantic);
-                })
-                .toList()
-              ..sort(),
+        customAppSelectors: _selectedCustomApps.where((selector) {
+          final semantic = _catalog?.selectorToAppKey[selector];
+          return semantic == null || !_selectedApps.contains(semantic);
+        }).toList()..sort(),
       );
       await _replaceLocalRules(payload.rules);
       _configureProcessRouting(payload.rules);
@@ -902,9 +904,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     if (selected.isEmpty) {
       return Text(
         'No applications selected.',
-        style: AppTextStyle.body.of(context).copyWith(
-          color: context.colorScheme.onSurfaceVariant,
-        ),
+        style: AppTextStyle.body
+            .of(context)
+            .copyWith(color: context.colorScheme.onSurfaceVariant),
       );
     }
     return Column(
@@ -912,10 +914,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
       children: [
         Text(
           'Selected apps',
-          style: AppTextStyle.subheadline.of(context).copyWith(
-            color: context.colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w700,
-          ),
+          style: AppTextStyle.subheadline
+              .of(context)
+              .copyWith(color: context.colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 8),
         Wrap(
@@ -923,9 +924,8 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           runSpacing: 8,
           children: [
             for (final app in selected)
-              InputChip(
-                label: Text(app.label),
-                tooltip: app.selector,
+              Chip(
+                label: app.label,
                 onDeleted: () => _toggleInstalledApp(app.selector, false),
               ),
           ],
@@ -1002,7 +1002,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 _saveConnectionDraft();
               },
               decoration: InputDecoration(
-                labelText: appLocalizations.url,
+                helperText: appLocalizations.url,
                 hintText: _defaultPolicyServiceUrl,
               ),
             ),
@@ -1015,12 +1015,12 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 _saveConnectionDraft();
               },
               onFieldSubmitted: (_) => _loadAssignedPolicy(),
-              decoration: InputDecoration(labelText: appLocalizations.key),
+              decoration: InputDecoration(hintText: appLocalizations.key),
             ),
             const SizedBox(height: 12),
             InputDecorator(
               decoration: InputDecoration(
-                labelText: appLocalizations.ruleTarget,
+                helperText: appLocalizations.ruleTarget,
               ),
               child: targets.isEmpty
                   ? Text(appLocalizations.selectSplitStrategy)
@@ -1029,10 +1029,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                       runSpacing: 8,
                       children: [
                         for (final target in targets)
-                          ChoiceChip(
-                            label: Text(target),
+                          Chip(
+                            label: target,
                             selected: selectedTarget == target,
-                            onSelected: (_) {
+                            onPressed: () {
                               setState(() {
                                 _selectedTarget = target;
                               });
@@ -1042,7 +1042,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                     ),
             ),
             const SizedBox(height: 12),
-            FilledButton.tonal(
+            FilledButton(
               onPressed: _busy
                   ? null
                   : () => _refreshFromServer(targets: targets),
@@ -1052,7 +1052,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                       children: [
                         SizedBox.square(
                           dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: ActivityIndicator(),
                         ),
                         SizedBox(width: 10),
                         Text('Syncing...'),
@@ -1075,12 +1075,12 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
+                    GlyphIcon(
                       isError
-                          ? Icons.error_outline
+                          ? AppGlyphs.error
                           : isSuccess
-                          ? Icons.check_circle_outline
-                          : Icons.info_outline,
+                          ? AppGlyphs.checkCircle
+                          : AppGlyphs.info,
                       size: 21,
                       color: statusTextColor,
                     ),
@@ -1088,11 +1088,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                     Expanded(
                       child: SelectableText(
                         status!,
-                        style: AppTextStyle.body.of(context).copyWith(
-                          color: statusTextColor,
-                          fontWeight: FontWeight.w700,
-                          height: 1.35,
-                        ),
+                        style: AppTextStyle.body
+                            .of(context)
+                            .copyWith(color: statusTextColor, height: 1.35),
                       ),
                     ),
                   ],
@@ -1119,10 +1117,10 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         runSpacing: 8,
         children: [
           for (final entry in modes)
-            ChoiceChip(
-              label: Text(entry.$2),
+            Chip(
+              label: entry.$2,
               selected: _mode == entry.$1,
-              onSelected: (_) {
+              onPressed: () {
                 setState(() {
                   _mode = entry.$1;
                 });
@@ -1167,12 +1165,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
         });
       },
       trailing: _appsLoading
-          ? const SizedBox.square(
-              dimension: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(
-              _appsExpanded ? Icons.expand_less : Icons.expand_more,
+          ? const SizedBox.square(dimension: 18, child: ActivityIndicator())
+          : GlyphIcon(
+              _appsExpanded ? AppGlyphs.chevronUp : AppGlyphs.chevronDown,
               size: 30,
               color: context.colorScheme.onSurface,
             ),
@@ -1184,88 +1179,84 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 const SizedBox(height: 10),
                 Text(
                   'Tap the header to choose more applications.',
-                  style: AppTextStyle.body.of(context).copyWith(
-                    color: context.colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: AppTextStyle.body
+                      .of(context)
+                      .copyWith(color: context.colorScheme.onSurfaceVariant),
                 ),
               ],
             )
           : Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _selectedAppsSummary(),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _appSearchController,
-            autofocus: Platform.isWindows,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              hintText: 'Search apps by name, .exe or package',
-              suffixIcon: IconButton(
-                tooltip: 'Refresh installed apps',
-                onPressed: _appsLoading ? null : _loadInstalledApps,
-                icon: const Icon(Icons.refresh),
-              ),
-            ),
-          ),
-          if (Platform.isAndroid && !_installedAppsPermissionGranted) ...[
-            const SizedBox(height: 8),
-            FilledButton.tonal(
-              onPressed: _grantInstalledAppsPermission,
-              child: Text(context.appLocalizations.confirm),
-            ),
-          ],
-          if (hasNativeApps && listEmpty && !_appsLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Text('No installed apps found'),
-            ),
-          if (Platform.isAndroid)
-            for (final item in android)
-              CheckboxListTile(
-                value: _isInstalledAppSelected(item.packageName),
-                onChanged: (value) {
-                  _toggleInstalledApp(item.packageName, value ?? false);
-                },
-                secondary: PackageIcon(
-                  packageName: item.packageName,
-                  size: 36,
-                  placeholder: const Icon(Icons.apps),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _selectedAppsSummary(),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _appSearchController,
+                  autofocus: Platform.isWindows,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    prefixIcon: const GlyphIcon(AppGlyphs.search),
+                    hintText: 'Search apps by name, .exe or package',
+                    suffixIcon: IconButton(
+                      tooltip: 'Refresh installed apps',
+                      onPressed: _appsLoading ? null : _loadInstalledApps,
+                      icon: const GlyphIcon(AppGlyphs.sync),
+                    ),
+                  ),
                 ),
-                title: Text(item.label),
-                subtitle: Text(item.packageName),
-                controlAffinity: ListTileControlAffinity.trailing,
-              ),
-          if (Platform.isWindows)
-            for (final item in windows)
-              CheckboxListTile(
-                value: _isInstalledAppSelected(item.selector),
-                onChanged: (value) {
-                  _toggleInstalledApp(item.selector, value ?? false);
-                },
-                secondary: const Icon(Icons.desktop_windows),
-                title: Text(item.label),
-                subtitle: Text(item.selector),
-                controlAffinity: ListTileControlAffinity.trailing,
-              ),
-          if (!hasNativeApps && _catalog != null)
-            for (final item in _catalog!.apps)
-              CheckboxListTile(
-                value: _selectedApps.contains(item.key),
-                onChanged: (value) {
-                  setState(() {
-                    value == true
-                        ? _selectedApps.add(item.key)
-                        : _selectedApps.remove(item.key);
-                  });
-                },
-                title: Text(item.title),
-                subtitle: Text(item.selectors.join(', ')),
-              ),
-        ],
-      ),
+                if (Platform.isAndroid && !_installedAppsPermissionGranted) ...[
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: _grantInstalledAppsPermission,
+                    child: Text(context.appLocalizations.confirm),
+                  ),
+                ],
+                if (hasNativeApps && listEmpty && !_appsLoading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text('No installed apps found'),
+                  ),
+                if (Platform.isAndroid)
+                  for (final item in android)
+                    _PolicyCheckboxRow(
+                      value: _isInstalledAppSelected(item.packageName),
+                      onChanged: (value) {
+                        _toggleInstalledApp(item.packageName, value ?? false);
+                      },
+                      secondary: PackageIcon(
+                        packageName: item.packageName,
+                        size: 36,
+                      ),
+                      title: Text(item.label),
+                      subtitle: Text(item.packageName),
+                    ),
+                if (Platform.isWindows)
+                  for (final item in windows)
+                    _PolicyCheckboxRow(
+                      value: _isInstalledAppSelected(item.selector),
+                      onChanged: (value) {
+                        _toggleInstalledApp(item.selector, value ?? false);
+                      },
+                      secondary: const GlyphIcon(AppGlyphs.appsList),
+                      title: Text(item.label),
+                      subtitle: Text(item.selector),
+                    ),
+                if (!hasNativeApps && _catalog != null)
+                  for (final item in _catalog!.apps)
+                    _PolicyCheckboxRow(
+                      value: _selectedApps.contains(item.key),
+                      onChanged: (value) {
+                        setState(() {
+                          value == true
+                              ? _selectedApps.add(item.key)
+                              : _selectedApps.remove(item.key);
+                        });
+                      },
+                      title: Text(item.title),
+                      subtitle: Text(item.selectors.join(', ')),
+                    ),
+              ],
+            ),
     );
   }
 
@@ -1278,7 +1269,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           : Column(
               children: [
                 for (final service in services)
-                  CheckboxListTile(
+                  _PolicyCheckboxRow(
                     value: _selectedServices.contains(service.key),
                     onChanged: (value) {
                       setState(() {
@@ -1312,8 +1303,8 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             },
       trailing: count == 0
           ? null
-          : Icon(
-              _domainsExpanded ? Icons.expand_less : Icons.expand_more,
+          : GlyphIcon(
+              _domainsExpanded ? AppGlyphs.chevronUp : AppGlyphs.chevronDown,
               size: 30,
               color: context.colorScheme.onSurface,
             ),
@@ -1329,14 +1320,14 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                   onSubmitted: (_) => _addDomain(),
                   decoration: const InputDecoration(
                     hintText: 'example.com',
-                    prefixIcon: Icon(Icons.language),
+                    prefixIcon: GlyphIcon(AppGlyphs.language),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton.filledTonal(
+              IconButton(
                 onPressed: _addDomain,
-                icon: const Icon(Icons.add),
+                icon: const GlyphIcon(AppGlyphs.add),
               ),
             ],
           ),
@@ -1345,10 +1336,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             if (!_domainsExpanded)
               Text(
                 '$count domains selected. Tap the header to manage them.',
-                style: AppTextStyle.body.of(context).copyWith(
-                  color: context.colorScheme.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: AppTextStyle.body
+                    .of(context)
+                    .copyWith(color: context.colorScheme.onSurfaceVariant),
               )
             else
               Align(
@@ -1358,8 +1348,8 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                   runSpacing: 8,
                   children: [
                     for (final domain in _customDomains)
-                      InputChip(
-                        label: Text(domain),
+                      Chip(
+                        label: domain,
                         onDeleted: () {
                           setState(() {
                             _customDomains.remove(domain);
@@ -1387,36 +1377,35 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
           Text(
             'Optional reusable library. Import adds these rules to the '
             'current local configuration; it does not replace it.',
-            style: AppTextStyle.body.of(context).copyWith(
-              color: context.colorScheme.onSurfaceVariant,
-            ),
+            style: AppTextStyle.body
+                .of(context)
+                .copyWith(color: context.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 10),
           if (_serverRuleSets.isEmpty)
-            FilledButton.tonal(
+            FilledButton(
               onPressed: !configured || _ruleSetsLoading
                   ? null
                   : () => _loadServerRuleSets(targets),
               child: _ruleSetsLoading
                   ? const SizedBox.square(
                       dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: ActivityIndicator(),
                     )
                   : const Text('Load server rule sets'),
             )
           else ...[
             for (final ruleSet in _serverRuleSets)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
+              ListRow(
+                padding: EdgeInsets.zero,
                 title: Text(ruleSet.name),
                 subtitle: Text(
                   [
                     if (ruleSet.description.isNotEmpty) ruleSet.description,
-                    '${ruleSet.domains.length} domains · '
-                        '${ruleSet.appSelectors.length} apps',
+                    '${ruleSet.domains.length} domains · ${ruleSet.appSelectors.length} apps',
                   ].join('\n'),
                 ),
-                trailing: FilledButton.tonal(
+                trailing: FilledButton(
                   onPressed: _busy
                       ? null
                       : () => _importRuleSetAndApply(ruleSet, targets),
@@ -1434,9 +1423,9 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
             const SizedBox(height: 8),
             Text(
               'Configure Policy Service URL and Device Key below first.',
-              style: AppTextStyle.caption1.of(context).copyWith(
-                color: context.colorScheme.onSurfaceVariant,
-              ),
+              style: AppTextStyle.caption1
+                  .of(context)
+                  .copyWith(color: context.colorScheme.onSurfaceVariant),
             ),
           ],
         ],
@@ -1449,7 +1438,7 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
     final targets = _ruleTargets();
 
     final body = _loading
-        ? const Center(child: CircularProgressIndicator())
+        ? const Center(child: ActivityIndicator())
         : ListView(
             padding: const EdgeInsets.all(
               16,
@@ -1467,13 +1456,13 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
                 child: _busy
                     ? const SizedBox.square(
                         dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: ActivityIndicator(),
                       )
                     : const Text('Apply split tunneling'),
               ),
               const SizedBox(height: 16),
               ..._connectionSection(context, targets),
-              FilledButton.tonal(
+              FilledButton(
                 onPressed: _busy
                     ? null
                     : () => _saveToPolicyServiceAndApply(targets),
@@ -1481,23 +1470,15 @@ class _VpnPolicyViewState extends ConsumerState<VpnPolicyView> {
               ),
               if (_payload != null && _payload!.revision.isNotEmpty) ...[
                 const SizedBox(height: 6),
-                Text(_payload!.revision, style: AppTextStyle.caption1.of(context)),
+                Text(
+                  _payload!.revision,
+                  style: AppTextStyle.caption1.of(context),
+                ),
               ],
             ],
           );
 
-    return BaseScaffold(
-      title: 'Split tunneling',
-      body: Localizations.override(
-        context: context,
-        locale: const Locale('en'),
-        delegates: const [
-          DefaultMaterialLocalizations.delegate,
-          DefaultWidgetsLocalizations.delegate,
-        ],
-        child: body,
-      ),
-    );
+    return BaseScaffold(title: 'Split tunneling', body: body);
   }
 }
 
@@ -1516,39 +1497,29 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = dark ? const Color(0xFF1B2432) : const Color(0xFFF3F6FA);
-    final borderColor = dark
-        ? const Color(0xFF66758B)
-        : const Color(0xFFA7B3C4);
-    final titleColor = dark ? const Color(0xFFF8FAFC) : const Color(0xFF172033);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 0,
-      color: cardColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: borderColor, width: 1.2),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            InkWell(
-              onTap: onHeaderTap,
-              borderRadius: BorderRadius.circular(10),
-              child: Padding(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        inert: true,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              PressSurface(
+                fill: Colors.transparent,
+                shape: AppShape.all(10),
+                inert: onHeaderTap == null,
+                onPressed: onHeaderTap,
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
                   children: [
                     Expanded(
                       child: Text(
                         title,
-                        style: AppTextStyle.headline.of(context).copyWith(
-                          color: titleColor,
-                          fontWeight: FontWeight.w700,
+                        style: AppTextStyle.headline.of(
+                          context,
+                          emphasized: true,
                         ),
                       ),
                     ),
@@ -1556,12 +1527,41 @@ class _Section extends StatelessWidget {
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            child,
-          ],
+              const SizedBox(height: 8),
+              child,
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+class _PolicyCheckboxRow extends StatelessWidget {
+  const _PolicyCheckboxRow({
+    required this.value,
+    required this.onChanged,
+    required this.title,
+    this.subtitle,
+    this.secondary,
+  });
+
+  final bool value;
+  final ValueChanged<bool?> onChanged;
+  final Widget title;
+  final Widget? subtitle;
+  final Widget? secondary;
+
+  @override
+  Widget build(BuildContext context) => PressSurface(
+    fill: Colors.transparent,
+    shape: AppShape.all(10),
+    onPressed: () => onChanged(!value),
+    child: ListRow(
+      leading: secondary,
+      title: title,
+      subtitle: subtitle,
+      trailing: Checkbox(value: value, onChanged: onChanged),
+    ),
+  );
 }

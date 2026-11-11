@@ -60,7 +60,10 @@ String releaseAssetName(String tag, String suffix) {
 }
 
 Uri releaseAssetUri(String tag, String name) {
-  return Uri.https('github.com', '/$repository/releases/download/$tag/$name');
+  return Uri.https(
+    'github.com',
+    '/$updateRepository/releases/download/$tag/$name',
+  );
 }
 
 final _checksumLine = RegExp(r'^([0-9a-fA-F]{64}) [ *](?:\./)?(.+)$');

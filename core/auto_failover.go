@@ -51,7 +51,7 @@ func startAutoFailureWatch() {
  if autoFailureWatch.cancel != nil { return }
  ctx, cancel := context.WithCancel(context.Background())
  autoFailureWatch.cancel = cancel
- go pollAutoFailure(ctx)
+ safeGo("VPN Policy auto failover", func() { pollAutoFailure(ctx) })
 }
 
 func stopAutoFailureWatch() {

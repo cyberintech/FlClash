@@ -590,7 +590,9 @@ class SetupAction extends _$SetupAction {
         profilesPath: directory,
         profileId: profileId,
         rawConfig: rawConfig,
-        realPatchConfig: patchConfig,
+        realPatchConfig: policy.sharedRules
+            ? patchConfig.copyWith(ipv6: rawConfig['ipv6'] == true)
+            : patchConfig,
         overrides: setupState.overrides,
         bypassPrivateRoute: networkSetting.bypassPrivateRoute,
         keepEmptyDnsOverrides: setupState.profileType != ProfileType.custom,
@@ -598,7 +600,9 @@ class SetupAction extends _$SetupAction {
         addedRules: [
           if (policy.localRules.isNotEmpty)
             ...policy.localRules.map((raw) => Rule.parse(raw))
-          else if (policy.localAppSelectors.isNotEmpty || policy.localDomains.isNotEmpty || policy.localMode != 'only_selected')
+          else if (policy.localAppSelectors.isNotEmpty ||
+              policy.localDomains.isNotEmpty ||
+              policy.localMode != 'only_selected')
             ...compileLocalVpnPolicy(
               mode: policy.localMode,
               vpnTarget: policy.vpnTarget.isEmpty ? 'VPN' : policy.vpnTarget,

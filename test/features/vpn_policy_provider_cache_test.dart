@@ -19,11 +19,16 @@ void main() {
       '/paths': jsonEncode({
         'proxies': [
           for (var index = 0; index < 72; index++)
-            {'name': 'route-$index', 'type': 'socks5', 'server': '127.0.0.1', 'port': 9},
+            {
+              'name': 'route-$index',
+              'type': 'socks5',
+              'server': '127.0.0.1',
+              'port': 9,
+            },
         ],
       }),
       '/direct': 'payload: []',
-      '/vpn': 'payload: [DOMAIN-SUFFIX,example.invalid]',
+      '/vpn': 'payload: ["DOMAIN-SUFFIX,example.invalid"]',
     };
     server.listen((request) async {
       requests++;
@@ -56,12 +61,17 @@ void main() {
 
   test('first import seeds72 actual routes and both shared lists', () async {
     await ensureManagedProviderCache(config());
-    final routes = jsonDecode(await File('${directory.path}/paths.yaml').readAsString());
+    final routes = jsonDecode(
+      await File('${directory.path}/paths.yaml').readAsString(),
+    );
     expect(routes['proxies'], hasLength(72));
     expect(File('${directory.path}/direct.yaml').existsSync(), isTrue);
     expect(File('${directory.path}/vpn.yaml').existsSync(), isTrue);
     expect(requests, 3);
-    expect(directory.listSync().where((file) => file.path.contains('.download-')), isEmpty);
+    expect(
+      directory.listSync().where((file) => file.path.contains('.download-')),
+      isEmpty,
+    );
   });
 
   test('healthy cache starts offline without redownloading', () async {
@@ -75,30 +85,55 @@ void main() {
   test('invalid route cache is repaired before applying core config', () async {
     await File('${directory.path}/paths.yaml').writeAsString('proxies: []');
     await ensureManagedProviderCache(config());
-    expect(validManagedProvider(
-      await File('${directory.path}/paths.yaml').readAsString(),
-      proxies: true,
-    ), isTrue);
+    expect(
+      validManagedProvider(
+        await File('${directory.path}/paths.yaml').readAsString(),
+        proxies: true,
+      ),
+      isTrue,
+    );
   });
 
-  test('empty subscription fails instead of accepting Compatible placeholder', () async {
-    bodies['/paths'] = 'proxies: []';
-    await expectLater(ensureManagedProviderCache(config()), throwsA(isA<MessageException>()));
-    expect(File('${directory.path}/paths.yaml').existsSync(), isFalse);
-  });
+  test(
+    'empty subscription fails instead of accepting Compatible placeholder',
+    () async {
+      bodies['/paths'] = 'proxies: []';
+      await expectLater(
+        ensureManagedProviderCache(config()),
+        throwsA(isA<MessageException>()),
+      );
+      expect(File('${directory.path}/paths.yaml').existsSync(), isFalse);
+    },
+  );
 
-  test('HTTP failure is surfaced and no broken cache replaces routes', () async {
-    bodies.remove('/paths');
-    await expectLater(ensureManagedProviderCache(config()), throwsA(isA<MessageException>()));
-    expect(File('${directory.path}/paths.yaml').existsSync(), isFalse);
-    expect(directory.listSync().where((file) => file.path.contains('.download-')), isEmpty);
-  });
+  test(
+    'HTTP failure is surfaced and no broken cache replaces routes',
+    () async {
+      bodies.remove('/paths');
+      await expectLater(
+        ensureManagedProviderCache(config()),
+        throwsA(isA<MessageException>()),
+      );
+      expect(File('${directory.path}/paths.yaml').existsSync(), isFalse);
+      expect(
+        directory.listSync().where((file) => file.path.contains('.download-')),
+        isEmpty,
+      );
+    },
+  );
 
-  test('ordinary profiles are not forced into managed provider behavior', () async {
-    await ensureManagedProviderCache(jsonEncode({
-      'proxy-providers': {'ordinary': {'type': 'http', 'url': 'https://example.invalid'}},
-    }));
-    expect(requests, 0);
-    expect(directory.listSync(), isEmpty);
-  });
+  test(
+    'ordinary profiles are not forced into managed provider behavior',
+    () async {
+      await ensureManagedProviderCache(
+        jsonEncode({
+          'proxy-providers': {
+            'ordinary': {'type': 'http', 'url': 'https://example.invalid'},
+          },
+        }),
+      );
+      expect(requests, 0);
+      expect(directory.listSync(), isEmpty);
+    },
+  );
 }

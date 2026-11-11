@@ -4,23 +4,32 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  SharedPreferences.setMockInitialValues({});
 
   late SharedPreferences store;
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     store = await SharedPreferences.getInstance();
     await store.clear();
   });
 
   test('two explicitly bound profiles retain their own credentials', () async {
-    await vpnPolicySettingsStore.save(7, const VpnPolicySettings(
-      serviceUrl: 'https://one.example', deviceKey: 'key-one', sharedRules: true,
-      localDomains: ['local.example'],
-    ));
-    await vpnPolicySettingsStore.save(8, const VpnPolicySettings(
-      serviceUrl: 'https://two.example', deviceKey: 'key-two',
-    ));
+    await vpnPolicySettingsStore.save(
+      7,
+      const VpnPolicySettings(
+        serviceUrl: 'https://one.example',
+        deviceKey: 'key-one',
+        sharedRules: true,
+        localDomains: ['local.example'],
+      ),
+    );
+    await vpnPolicySettingsStore.save(
+      8,
+      const VpnPolicySettings(
+        serviceUrl: 'https://two.example',
+        deviceKey: 'key-two',
+      ),
+    );
     final first = await vpnPolicySettingsStore.load(7);
     final second = await vpnPolicySettingsStore.load(8);
     expect(first.deviceKey, 'key-one');

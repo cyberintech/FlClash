@@ -88,7 +88,10 @@ Future<void> _ensureProvider(
   File? pending;
   try {
     final request = await client.getUrl(uri).timeout(timeout);
-    request.headers.set(HttpHeaders.userAgentHeader, 'FlClash-VPN-Policy/0.9.3');
+    request.headers.set(
+      HttpHeaders.userAgentHeader,
+      'FlClash-VPN-Policy/0.9.3',
+    );
     if (provider['headers'] case final Map headers) {
       for (final entry in headers.entries) {
         final values = entry.value;
