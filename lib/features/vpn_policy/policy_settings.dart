@@ -15,6 +15,7 @@ class VpnPolicySettings {
   final String localMode;
   final List<String> localAppSelectors;
   final List<String> localDomains;
+  final List<String> localRules;
 
   const VpnPolicySettings({
     this.serviceUrl = '',
@@ -26,6 +27,7 @@ class VpnPolicySettings {
     this.localMode = 'only_selected',
     this.localAppSelectors = const [],
     this.localDomains = const [],
+    this.localRules = const [],
   });
 
   factory VpnPolicySettings.fromJson(Map<String, dynamic> json) {
@@ -40,6 +42,7 @@ class VpnPolicySettings {
       localAppSelectors: (json['localAppSelectors'] as List? ?? const [])
           .map((value) => value.toString())
           .toList(growable: false),
+      localRules: (json['localRules'] as List? ?? const []).map((value) => value.toString()).toList(growable: false),
       localDomains: (json['localDomains'] as List? ?? const [])
           .map((value) => value.toString())
           .toList(growable: false),
@@ -56,6 +59,7 @@ class VpnPolicySettings {
     String? localMode,
     List<String>? localAppSelectors,
     List<String>? localDomains,
+    List<String>? localRules,
   }) {
     return VpnPolicySettings(
       serviceUrl: serviceUrl ?? this.serviceUrl,
@@ -67,6 +71,7 @@ class VpnPolicySettings {
       localMode: localMode ?? this.localMode,
       localAppSelectors: localAppSelectors ?? this.localAppSelectors,
       localDomains: localDomains ?? this.localDomains,
+      localRules: localRules ?? this.localRules,
     );
   }
 
@@ -80,6 +85,7 @@ class VpnPolicySettings {
     'localMode': localMode,
     'localAppSelectors': localAppSelectors,
     'localDomains': localDomains,
+    'localRules': localRules,
   };
 }
 

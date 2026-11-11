@@ -1,15 +1,16 @@
 import 'dart:async';
 
-import 'package:fl_clash/icons/icons.dart';
+import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/providers/config.dart';
+import 'package:fl_clash/providers/on_demand.dart';
 import 'package:fl_clash/providers/state.dart';
-import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/config/on_demand.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/services.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wifi_ssid/wifi_ssid.dart';
@@ -35,6 +36,22 @@ class _TestLocationPermissions extends LocationPermissions {
   WifiSsidPermission build() => _initial;
 }
 
+class _TestBatteryOptimizationIgnored extends BatteryOptimizationIgnored {
+  _TestBatteryOptimizationIgnored(this._initial);
+
+  final bool _initial;
+  int requests = 0;
+
+  @override
+  Stream<bool> build() => Stream.value(_initial);
+
+  @override
+  Future<void> request() async {
+    requests++;
+    state = const AsyncData(true);
+  }
+}
+
 void main() {
   late ProviderContainer container;
 
@@ -42,8 +59,10 @@ void main() {
     WidgetTester tester, {
     List<String> ssids = const [],
     WifiSsidPermission permission = WifiSsidPermission.denied,
+    bool batteryIgnored = false,
     bool isAndroid = false,
     bool isMacOS = false,
+    bool isWindows = false,
     bool isStart = false,
     Locale? locale,
     Size size = const Size(1400, 1000),
@@ -59,6 +78,9 @@ void main() {
         locationPermissionsProvider.overrideWith(
           () => _TestLocationPermissions(permission),
         ),
+        batteryOptimizationIgnoredProvider.overrideWith(
+          () => _TestBatteryOptimizationIgnored(batteryIgnored),
+        ),
         isStartProvider.overrideWithValue(isStart),
       ],
     );
@@ -70,7 +92,11 @@ void main() {
         container: container,
         child: TestApp(
           locale: locale,
-          child: OnDemandView(isAndroid: isAndroid, isMacOS: isMacOS),
+          child: OnDemandView(
+            isAndroid: isAndroid,
+            isMacOS: isMacOS,
+            isWindows: isWindows,
+          ),
         ),
       ),
     );
@@ -83,8 +109,8 @@ void main() {
     await pumpView(tester);
 
     expect(find.text('SSIDs are empty'), findsOneWidget);
-    expect(find.text('Add'), findsOneWidget);
-    expect(find.text('Select all'), findsNothing);
+    expect(find.byTooltip('Add'), findsOneWidget);
+    expect(find.byTooltip('Select all'), findsNothing);
     expect(find.byGlyph(AppGlyphs.delete), findsNothing);
   });
 
@@ -102,35 +128,39 @@ void main() {
     await pumpView(tester, ssids: ['Home', 'Office']);
     expect(find.byGlyph(AppGlyphs.delete), findsNothing);
 
-    await tester.tap(find.byType(CommonCheckBox).first);
+    await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
 
     expect(find.byGlyph(AppGlyphs.delete), findsOneWidget);
-    expect(find.text('Select all'), findsOneWidget);
-    expect(find.text('Add'), findsNothing);
+    expect(find.byTooltip('Select all'), findsOneWidget);
+    expect(find.byTooltip('Add'), findsNothing);
   });
 
   testWidgets('select all takes every SSID, and pressing it again clears', (
     tester,
   ) async {
     await pumpView(tester, ssids: ['Home', 'Office']);
-    await tester.tap(find.byType(CommonCheckBox).first);
+    await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Select all'));
+    await tester.tap(find.byTooltip('Select all'));
     await tester.pumpAndSettle();
     expect(container.read(itemsProvider(_viewKey(tester))), {'Home', 'Office'});
 
-    await tester.tap(find.text('Select all'));
+    await tester.tap(find.byTooltip('Select all'));
     await tester.pumpAndSettle();
-    expect(find.text('Add'), findsOneWidget, reason: 'selection was cleared');
+    expect(
+      find.byTooltip('Add'),
+      findsOneWidget,
+      reason: 'selection was cleared',
+    );
   });
 
   testWidgets('deleting removes the selected SSIDs and clears the selection', (
     tester,
   ) async {
     await pumpView(tester, ssids: ['Home', 'Office']);
-    await tester.tap(find.byType(CommonCheckBox).first);
+    await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
 
     await tester.tap(find.byGlyph(AppGlyphs.delete));
@@ -138,7 +168,11 @@ void main() {
 
     expect(container.read(excludeSSIDsProvider), ['Office']);
     expect(find.text('Home'), findsNothing);
-    expect(find.text('Add'), findsOneWidget, reason: 'selection was cleared');
+    expect(
+      find.byTooltip('Add'),
+      findsOneWidget,
+      reason: 'selection was cleared',
+    );
   });
 
   testWidgets('the location prerequisite reflects a denied permission', (
@@ -215,6 +249,25 @@ void main() {
     expect(find.text('Location permission required'), findsOneWidget);
   });
 
+  testWidgets('Windows refused location access offers the settings', (
+    tester,
+  ) async {
+    const channel = MethodChannel('wifi_ssid');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+      channel,
+      (_) async => WifiSsidPermission.permanentlyDenied.index,
+    );
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    await pumpView(tester, isWindows: true);
+
+    await tester.tap(find.text('Tap to authorize'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Location permission required'), findsOneWidget);
+    expect(find.text('Go'), findsOneWidget);
+  });
+
   testWidgets('Android also asks to be left out of battery optimization', (
     tester,
   ) async {
@@ -224,27 +277,67 @@ void main() {
     expect(find.text('Location permission'), findsOneWidget);
   });
 
-  testWidgets('while running the battery item explains instead of asking', (
+  testWidgets('authorizing the battery item asks and shows the answer', (
     tester,
   ) async {
-    await pumpView(tester, isAndroid: true, isStart: true);
-    container.read(viewSizeProvider.notifier).value = const Size(1400, 1000);
-
-    final appLocalizations = AppLocalizations.of(
-      tester.element(find.byType(OnDemandView)),
+    await pumpView(tester, isAndroid: true);
+    final batteryItem = find.ancestor(
+      of: find.text('Ignore battery optimization'),
+      matching: find.byType(DecorationListItem),
     );
-    expect(find.bySemanticsLabel(appLocalizations.tapToAuthorize), findsOne);
 
-    await tester.tap(find.byTooltip(appLocalizations.tip));
+    await tester.tap(
+      find.descendant(of: batteryItem, matching: find.text('Tap to authorize')),
+    );
     await tester.pumpAndSettle();
 
+    final notifier =
+        container.read(batteryOptimizationIgnoredProvider.notifier)
+            as _TestBatteryOptimizationIgnored;
+    expect(notifier.requests, 1);
     expect(
-      find.text(appLocalizations.batteryOptimizationStatusTip),
+      find.descendant(
+        of: batteryItem,
+        matching: find.bySemanticsLabel('Authorized'),
+      ),
       findsOneWidget,
     );
   });
 
-  testWidgets('the authorize action sits on its own line under the text', (
+  testWidgets('an exempt app does not ask again', (tester) async {
+    await pumpView(tester, isAndroid: true, batteryIgnored: true);
+    final batteryItem = find.ancestor(
+      of: find.text('Ignore battery optimization'),
+      matching: find.byType(DecorationListItem),
+    );
+
+    await tester.tap(
+      find.descendant(of: batteryItem, matching: find.text('Authorized')),
+    );
+    await tester.pumpAndSettle();
+
+    final notifier =
+        container.read(batteryOptimizationIgnoredProvider.notifier)
+            as _TestBatteryOptimizationIgnored;
+    expect(notifier.requests, 0);
+  });
+
+  testWidgets('while running the battery item still shows and asks', (
+    tester,
+  ) async {
+    await pumpView(tester, isAndroid: true, isStart: true);
+
+    await tester.tap(find.text('Tap to authorize').first);
+    await tester.pumpAndSettle();
+
+    final notifier =
+        container.read(batteryOptimizationIgnoredProvider.notifier)
+            as _TestBatteryOptimizationIgnored;
+    expect(notifier.requests, 1);
+    expect(find.byTooltip('Tip'), findsNothing);
+  });
+
+  testWidgets('the authorize action trails its row, the reason the group', (
     tester,
   ) async {
     await pumpView(tester, isMacOS: true, locale: const Locale('ru'));
@@ -252,25 +345,20 @@ void main() {
     final appLocalizations = AppLocalizations.of(
       tester.element(find.byType(OnDemandView)),
     );
+    final row = tester.getRect(find.byType(DecorationListItem).first);
     final desc = find.text(appLocalizations.locationPermissionDesc);
-    final button = find
-        .ancestor(
-          of: find.text(appLocalizations.tapToAuthorize),
-          matching: find.byType(FilledButton),
-        )
-        .first;
+    final button = tester.getRect(
+      find
+          .ancestor(
+            of: find.text(appLocalizations.tapToAuthorize),
+            matching: find.byType(FilledButton),
+          )
+          .first,
+    );
 
-    expect(
-      tester.getTopLeft(button).dy,
-      greaterThanOrEqualTo(tester.getBottomLeft(desc).dy),
-    );
-    expect(
-      tester.getRect(button).right,
-      closeTo(
-        tester.getRect(find.byType(DecorationListItem).first).right - 16,
-        1,
-      ),
-    );
+    expect(button.center.dy, closeTo(row.center.dy, 1));
+    expect(button.right, closeTo(row.right - 16, 1));
+    expect(tester.getTopLeft(desc).dy, greaterThanOrEqualTo(row.bottom));
   });
 
   testWidgets('a desktop that is not macOS asks for no prerequisite', (

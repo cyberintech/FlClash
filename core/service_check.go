@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"context"
@@ -49,18 +49,19 @@ type ServiceCheckParams struct {
 
 // runServiceCheck stamps Name; a blank Status means a rule has yet to judge it.
 type ServiceCheckItem struct {
-	Name         string   `json:"name"`
-	Status       string   `json:"status"`
-	Region       string   `json:"region,omitempty"`
-	Delay        int64    `json:"delay,omitempty"`
-	Chains       []string `json:"chains,omitempty"`
-	CheckedAt    int64    `json:"checked-at"`
-	CoreEpoch    uint64   `json:"core-epoch"`
-	PicksVersion uint64   `json:"picks-version"`
+	Name         string     `json:"name"`
+	Status       string     `json:"status"`
+	Region       string     `json:"region,omitempty"`
+	Delay        int64      `json:"delay,omitempty"`
+	Chains       []string   `json:"chains,omitempty"`
+	CheckedAt    int64      `json:"checked-at"`
+	CoreEpoch    uint64     `json:"core-epoch"`
+	RouteVersion uint64     `json:"route-version"`
+	Hits         []RouteHit `json:"hits,omitempty"`
 }
 
 var (
-	serviceCheckSlots = make(chan struct{}, serviceCheckConcurrency)
+	serviceCheckSlots = make(slots, serviceCheckConcurrency)
 
 	serviceClaimsMu sync.Mutex
 	serviceClaims   = map[string]*context.CancelFunc{}
@@ -70,6 +71,7 @@ type serviceEnv struct {
 	ctx       context.Context
 	proxyName string
 	timeout   time.Duration
+	hits      *hitRecorder
 }
 
 func (e serviceEnv) get(url string, maxBody int64) *ProbeResult {
@@ -83,6 +85,7 @@ func (e serviceEnv) scan(url string, until func(tail string) bool) *ProbeResult 
 func (e serviceEnv) send(req probeRequest) *ProbeResult {
 	req.proxyName = e.proxyName
 	req.timeout = e.timeout
+	req.recorder = e.hits
 	headers := map[string]string{"User-Agent": browserUserAgent}
 	for name, value := range req.headers {
 		headers[name] = value
@@ -108,6 +111,7 @@ var serviceCheckers = []serviceChecker{
 	{name: "prime-video", check: checkPrimeVideo},
 	{name: "spotify", check: checkSpotify},
 	{name: "tiktok", check: checkTikTok},
+	{name: "discord", check: checkDiscord},
 	{name: "bilibili", check: checkBilibili},
 }
 
@@ -118,7 +122,7 @@ func handleServiceCheck(params *ServiceCheckParams) []ServiceCheckItem {
 		return items
 	}
 
-	timeout := probeTimeout(params.Timeout)
+	timeout := timeoutFromMillis(params.Timeout, defaultProbeTimeout)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout*serviceSweepBudgetFactor)
 	defer cancel()
 
@@ -128,12 +132,12 @@ func handleServiceCheck(params *ServiceCheckParams) []ServiceCheckItem {
 	defer release()
 	var running sync.WaitGroup
 	for index, checker := range wanted {
-		granted := acquireSlot(contexts[index], serviceCheckSlots)
+		granted := serviceCheckSlots.acquire(contexts[index])
 		running.Add(1)
 		go func(index int, checker serviceChecker) {
 			defer running.Done()
 			if granted {
-				defer func() { <-serviceCheckSlots }()
+				defer serviceCheckSlots.release()
 			}
 			items[index] = runServiceCheck(contexts[index], checker, params.ProxyName, timeout)
 		}(index, checker)
@@ -144,7 +148,8 @@ func handleServiceCheck(params *ServiceCheckParams) []ServiceCheckItem {
 
 // A misbehaving rule must not take the sweep down with it.
 func runServiceCheck(ctx context.Context, checker serviceChecker, proxyName string, timeout time.Duration) (item ServiceCheckItem) {
-	epoch, picksVersion := routeStamp()
+	epoch, version := routeStamp()
+	hits := &hitRecorder{}
 	item = ServiceCheckItem{Status: serviceFailed}
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -153,12 +158,13 @@ func runServiceCheck(ctx context.Context, checker serviceChecker, proxyName stri
 		item.Name = checker.name
 		item.CheckedAt = time.Now().UnixMilli()
 		item.CoreEpoch = epoch
-		item.PicksVersion = picksVersion
+		item.RouteVersion = version
+		item.Hits = hits.list()
 	}()
 	if ctx.Err() != nil {
 		return item
 	}
-	env := serviceEnv{ctx: ctx, proxyName: proxyName, timeout: timeout}
+	env := serviceEnv{ctx: ctx, proxyName: proxyName, timeout: timeout, hits: hits}
 	item = checker.check(env)
 	if item.Status == serviceTimeout && hasBudget(ctx, timeout) {
 		item = checker.check(env)
@@ -278,9 +284,11 @@ func answered(item ServiceCheckItem, result *ProbeResult) bool {
 }
 
 func bodyContains(result *ProbeResult, needles ...string) bool {
-	body := strings.ToLower(result.Body)
+	if result.lowerBody == "" {
+		result.lowerBody = strings.ToLower(result.Body)
+	}
 	for _, needle := range needles {
-		if strings.Contains(body, needle) {
+		if strings.Contains(result.lowerBody, needle) {
 			return true
 		}
 	}

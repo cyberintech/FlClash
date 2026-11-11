@@ -49,6 +49,44 @@ final class SafeModeProvider extends $FunctionalProvider<bool, bool, bool>
 
 String _$safeModeHash() => r'3ef07344f5a8dbf775ccf0a4861c0317ec8b2266';
 
+/// Android: su is there and granted FlClash's last request.
+
+@ProviderFor(rootAccess)
+final rootAccessProvider = RootAccessProvider._();
+
+/// Android: su is there and granted FlClash's last request.
+
+final class RootAccessProvider
+    extends $FunctionalProvider<AsyncValue<bool>, bool, FutureOr<bool>>
+    with $FutureModifier<bool>, $FutureProvider<bool> {
+  /// Android: su is there and granted FlClash's last request.
+  RootAccessProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'rootAccessProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$rootAccessHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<bool> $createElement($ProviderPointer pointer) =>
+      $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<bool> create(Ref ref) {
+    return rootAccess(ref);
+  }
+}
+
+String _$rootAccessHash() => r'59f43852dbede9ebe3301b885d63cd0a3961126d';
+
 @ProviderFor(AuthorizedTunEnable)
 final authorizedTunEnableProvider = AuthorizedTunEnableProvider._();
 
@@ -95,6 +133,59 @@ abstract class _$AuthorizedTunEnable extends $Notifier<TunAuthorizationState> {
             as $ClassProviderElement<
               AnyNotifier<TunAuthorizationState, TunAuthorizationState>,
               TunAuthorizationState,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
+@ProviderFor(UpdateDownloadState)
+final updateDownloadStateProvider = UpdateDownloadStateProvider._();
+
+final class UpdateDownloadStateProvider
+    extends $NotifierProvider<UpdateDownloadState, UpdateDownload?> {
+  UpdateDownloadStateProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'updateDownloadStateProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$updateDownloadStateHash();
+
+  @$internal
+  @override
+  UpdateDownloadState create() => UpdateDownloadState();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(UpdateDownload? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<UpdateDownload?>(value),
+    );
+  }
+}
+
+String _$updateDownloadStateHash() =>
+    r'31a28cbffa1d4a3c35a478262ef61c10271048c9';
+
+abstract class _$UpdateDownloadState extends $Notifier<UpdateDownload?> {
+  UpdateDownload? build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<UpdateDownload?, UpdateDownload?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<UpdateDownload?, UpdateDownload?>,
+              UpdateDownload?,
               Object?,
               Object?
             >;
@@ -185,7 +276,7 @@ final class RequestsProvider
   }
 }
 
-String _$requestsHash() => r'ceb041f2418513a5307b64bc9b5b58cae41e6eec';
+String _$requestsHash() => r'fe172892ec899bd6fd53dcbfebf65cd9e856efa7';
 
 abstract class _$Requests extends $Notifier<FixedList<TrackerInfo>> {
   FixedList<TrackerInfo> build();
@@ -776,6 +867,68 @@ abstract class _$RunTime extends $Notifier<int?> {
   }
 }
 
+/// What the running Android service was started with: it builds the tunnel
+/// once, so a later change waits for a restart.
+
+@ProviderFor(RunningVpnOptions)
+final runningVpnOptionsProvider = RunningVpnOptionsProvider._();
+
+/// What the running Android service was started with: it builds the tunnel
+/// once, so a later change waits for a restart.
+final class RunningVpnOptionsProvider
+    extends $NotifierProvider<RunningVpnOptions, VpnOptions?> {
+  /// What the running Android service was started with: it builds the tunnel
+  /// once, so a later change waits for a restart.
+  RunningVpnOptionsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'runningVpnOptionsProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$runningVpnOptionsHash();
+
+  @$internal
+  @override
+  RunningVpnOptions create() => RunningVpnOptions();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(VpnOptions? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<VpnOptions?>(value),
+    );
+  }
+}
+
+String _$runningVpnOptionsHash() => r'9025007c52157af09895d6e0b3ab3c1f0fa801ca';
+
+/// What the running Android service was started with: it builds the tunnel
+/// once, so a later change waits for a restart.
+
+abstract class _$RunningVpnOptions extends $Notifier<VpnOptions?> {
+  VpnOptions? build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref = this.ref as $Ref<VpnOptions?, VpnOptions?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<VpnOptions?, VpnOptions?>,
+              VpnOptions?,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
 /// False while the window is hidden or the Android activity is in the
 /// background; work that only feeds the UI waits for it to come back.
 
@@ -939,14 +1092,17 @@ abstract class _$SideWidth extends $Notifier<double> {
   }
 }
 
-/// Whether the native window currently draws a backdrop behind the content.
+/// The opacity the sidebar keeps its own color at over the backdrop the native
+/// window draws behind the content, or null while it draws none.
 
 @ProviderFor(WindowBlur)
 final windowBlurProvider = WindowBlurProvider._();
 
-/// Whether the native window currently draws a backdrop behind the content.
-final class WindowBlurProvider extends $NotifierProvider<WindowBlur, bool> {
-  /// Whether the native window currently draws a backdrop behind the content.
+/// The opacity the sidebar keeps its own color at over the backdrop the native
+/// window draws behind the content, or null while it draws none.
+final class WindowBlurProvider extends $NotifierProvider<WindowBlur, double?> {
+  /// The opacity the sidebar keeps its own color at over the backdrop the native
+  /// window draws behind the content, or null while it draws none.
   WindowBlurProvider._()
     : super(
         from: null,
@@ -966,29 +1122,30 @@ final class WindowBlurProvider extends $NotifierProvider<WindowBlur, bool> {
   WindowBlur create() => WindowBlur();
 
   /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(bool value) {
+  Override overrideWithValue(double? value) {
     return $ProviderOverride(
       origin: this,
-      providerOverride: $SyncValueProvider<bool>(value),
+      providerOverride: $SyncValueProvider<double?>(value),
     );
   }
 }
 
-String _$windowBlurHash() => r'1009d8da62ada83f4afc379063d69413d359821b';
+String _$windowBlurHash() => r'0233223726071e4dd10bcb5875977dc652100e15';
 
-/// Whether the native window currently draws a backdrop behind the content.
+/// The opacity the sidebar keeps its own color at over the backdrop the native
+/// window draws behind the content, or null while it draws none.
 
-abstract class _$WindowBlur extends $Notifier<bool> {
-  bool build();
+abstract class _$WindowBlur extends $Notifier<double?> {
+  double? build();
   @$mustCallSuper
   @override
   WhenComplete runBuild() {
-    final ref = this.ref as $Ref<bool, bool>;
+    final ref = this.ref as $Ref<double?, double?>;
     final element =
         ref.element
             as $ClassProviderElement<
-              AnyNotifier<bool, bool>,
-              bool,
+              AnyNotifier<double?, double?>,
+              double?,
               Object?,
               Object?
             >;
@@ -1117,47 +1274,6 @@ final class IsMobileViewProvider extends $FunctionalProvider<bool, bool, bool>
 }
 
 String _$isMobileViewHash() => r'1d75bccb4f50ae206bf43b68df869a5d95e5ea5f';
-
-@ProviderFor(viewHeight)
-final viewHeightProvider = ViewHeightProvider._();
-
-final class ViewHeightProvider
-    extends $FunctionalProvider<double, double, double>
-    with $Provider<double> {
-  ViewHeightProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'viewHeightProvider',
-        isAutoDispose: false,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$viewHeightHash();
-
-  @$internal
-  @override
-  $ProviderElement<double> $createElement($ProviderPointer pointer) =>
-      $ProviderElement(pointer);
-
-  @override
-  double create(Ref ref) {
-    return viewHeight(ref);
-  }
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(double value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<double>(value),
-    );
-  }
-}
-
-String _$viewHeightHash() => r'dc3fc18337b5ce9fc953d994c380e8f1fa49f352';
 
 @ProviderFor(Init)
 final initProvider = InitProvider._();
@@ -2062,94 +2178,6 @@ abstract class _$Items extends $Notifier<Set<dynamic>> {
   }
 }
 
-@ProviderFor(Item)
-final itemProvider = ItemFamily._();
-
-final class ItemProvider extends $NotifierProvider<Item, dynamic> {
-  ItemProvider._({
-    required ItemFamily super.from,
-    required String super.argument,
-  }) : super(
-         retry: null,
-         name: r'itemProvider',
-         isAutoDispose: true,
-         dependencies: null,
-         $allTransitiveDependencies: null,
-       );
-
-  @override
-  String debugGetCreateSourceHash() => _$itemHash();
-
-  @override
-  String toString() {
-    return r'itemProvider'
-        ''
-        '($argument)';
-  }
-
-  @$internal
-  @override
-  Item create() => Item();
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(dynamic value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<dynamic>(value),
-    );
-  }
-
-  @override
-  bool operator ==(Object other) {
-    return other is ItemProvider && other.argument == argument;
-  }
-
-  @override
-  int get hashCode {
-    return argument.hashCode;
-  }
-}
-
-String _$itemHash() => r'bd46bf2e285d7171173ed7c46455ff4c39e80a46';
-
-final class ItemFamily extends $Family
-    with $ClassFamilyOverride<Item, dynamic, dynamic, dynamic, String> {
-  ItemFamily._()
-    : super(
-        retry: null,
-        name: r'itemProvider',
-        dependencies: null,
-        $allTransitiveDependencies: null,
-        isAutoDispose: true,
-      );
-
-  ItemProvider call(String key) => ItemProvider._(argument: key, from: this);
-
-  @override
-  String toString() => r'itemProvider';
-}
-
-abstract class _$Item extends $Notifier<dynamic> {
-  late final _$args = ref.$arg as String;
-  String get key => _$args;
-
-  dynamic build(String key);
-  @$mustCallSuper
-  @override
-  WhenComplete runBuild() {
-    final ref = this.ref as $Ref<dynamic, dynamic>;
-    final element =
-        ref.element
-            as $ClassProviderElement<
-              AnyNotifier<dynamic, dynamic>,
-              dynamic,
-              Object?,
-              Object?
-            >;
-    return element.handleCreate(ref, () => build(_$args));
-  }
-}
-
 @ProviderFor(UpdatingKeys)
 final updatingKeysProvider = UpdatingKeysProvider._();
 
@@ -2323,113 +2351,6 @@ abstract class _$CurrentSSID extends $Notifier<String?> {
             as $ClassProviderElement<
               AnyNotifier<String?, String?>,
               String?,
-              Object?,
-              Object?
-            >;
-    return element.handleCreate(ref, build);
-  }
-}
-
-@ProviderFor(BatteryOptimizationDisable)
-final batteryOptimizationDisableProvider =
-    BatteryOptimizationDisableProvider._();
-
-final class BatteryOptimizationDisableProvider
-    extends $NotifierProvider<BatteryOptimizationDisable, bool> {
-  BatteryOptimizationDisableProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'batteryOptimizationDisableProvider',
-        isAutoDispose: false,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$batteryOptimizationDisableHash();
-
-  @$internal
-  @override
-  BatteryOptimizationDisable create() => BatteryOptimizationDisable();
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(bool value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<bool>(value),
-    );
-  }
-}
-
-String _$batteryOptimizationDisableHash() =>
-    r'a95e3e5500f685d44f61804ea280a6a73d639ac1';
-
-abstract class _$BatteryOptimizationDisable extends $Notifier<bool> {
-  bool build();
-  @$mustCallSuper
-  @override
-  WhenComplete runBuild() {
-    final ref = this.ref as $Ref<bool, bool>;
-    final element =
-        ref.element
-            as $ClassProviderElement<
-              AnyNotifier<bool, bool>,
-              bool,
-              Object?,
-              Object?
-            >;
-    return element.handleCreate(ref, build);
-  }
-}
-
-@ProviderFor(LocationPermissions)
-final locationPermissionsProvider = LocationPermissionsProvider._();
-
-final class LocationPermissionsProvider
-    extends $NotifierProvider<LocationPermissions, WifiSsidPermission> {
-  LocationPermissionsProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'locationPermissionsProvider',
-        isAutoDispose: false,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$locationPermissionsHash();
-
-  @$internal
-  @override
-  LocationPermissions create() => LocationPermissions();
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(WifiSsidPermission value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<WifiSsidPermission>(value),
-    );
-  }
-}
-
-String _$locationPermissionsHash() =>
-    r'0097088be7aab27f635eff31a7f88bc1067dfe34';
-
-abstract class _$LocationPermissions extends $Notifier<WifiSsidPermission> {
-  WifiSsidPermission build();
-  @$mustCallSuper
-  @override
-  WhenComplete runBuild() {
-    final ref = this.ref as $Ref<WifiSsidPermission, WifiSsidPermission>;
-    final element =
-        ref.element
-            as $ClassProviderElement<
-              AnyNotifier<WifiSsidPermission, WifiSsidPermission>,
-              WifiSsidPermission,
               Object?,
               Object?
             >;

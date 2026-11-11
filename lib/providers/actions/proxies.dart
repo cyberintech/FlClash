@@ -15,9 +15,10 @@ class _DelayTestTarget {
 typedef _DelayTestBatch = ({List<Proxy> proxies, String? testUrl});
 
 class _DelayTestJob {
-  _DelayTestJob(Iterable<String> keys) : held = keys.toSet();
+  _DelayTestJob(Iterable<String> keys, this.timeout) : held = keys.toSet();
 
   final Set<String> held;
+  final Duration timeout;
   final Set<String> startedOnDispatch = {};
   bool cancelled = false;
 }
@@ -113,7 +114,6 @@ class ProxiesAction extends _$ProxiesAction {
 
   Future<void> updateGroups() async {
     try {
-      commonPrint.log('updateGroups');
       ref.read(groupsProvider.notifier).value = await retry(
         task: () async {
           final sortType = ref.read(
@@ -121,7 +121,7 @@ class ProxiesAction extends _$ProxiesAction {
           );
           final delayMap = ref.read(delayDataSourceProvider);
           final testUrl = ref.read(
-            appSettingProvider.select((state) => state.testUrl),
+            patchClashConfigProvider.select((state) => state.testUrl),
           );
           final selectedMap = ref.read(
             currentProfileProvider.select((state) => state?.selectedMap ?? {}),
@@ -198,9 +198,9 @@ class ProxiesAction extends _$ProxiesAction {
         logLevel: coreFailureLogLevel(error),
       );
       profilesAction.updateCurrentSelectedMap(groupName, rollbackName);
-      dialogs.showNotifier(
+      dialogs.showBanner(
         currentAppLocalizations.changeProxyFailedTip,
-        level: MessageLevel.error,
+        level: BannerLevel.error,
       );
       return;
     }
@@ -221,7 +221,7 @@ class ProxiesAction extends _$ProxiesAction {
     }
   }
 
-  Future<String> updateProvider(
+  Future<void> updateProvider(
     ExternalProvider provider, {
     bool showLoading = false,
   }) async {
@@ -231,14 +231,17 @@ class ProxiesAction extends _$ProxiesAction {
               .start(provider.updatingKey, scope: UpdatingScope.core)
         : null;
     try {
-      final message = await _core.updateExternalProvider(
-        providerName: provider.name,
+      final clashProvidersAction = ref.read(
+        clashProvidersActionProvider.notifier,
       );
-      if (message.isNotEmpty) return message;
+      final ruleSet = await clashProvidersAction.remoteProviderOf(provider);
+      if (ruleSet != null && !await clashProvidersAction.syncRemote(ruleSet)) {
+        return;
+      }
+      await _core.updateExternalProvider(provider.name);
       ref
           .read(providersProvider.notifier)
           .setProvider(await _core.getExternalProvider(provider.name));
-      return '';
     } finally {
       if (operation != null) {
         ref
@@ -248,7 +251,7 @@ class ProxiesAction extends _$ProxiesAction {
     }
   }
 
-  Future<String> sideLoadExternalProvider(
+  Future<void> sideLoadExternalProvider(
     ExternalProvider provider,
     String data, {
     bool showLoading = false,
@@ -259,15 +262,13 @@ class ProxiesAction extends _$ProxiesAction {
               .start(provider.updatingKey, scope: UpdatingScope.core)
         : null;
     try {
-      final message = await _core.sideLoadExternalProvider(
+      await _core.sideLoadExternalProvider(
         providerName: provider.name,
         data: data,
       );
-      if (message.isNotEmpty) return message;
       ref
           .read(providersProvider.notifier)
           .setProvider(await _core.getExternalProvider(provider.name));
-      return '';
     } finally {
       if (operation != null) {
         ref
@@ -275,6 +276,37 @@ class ProxiesAction extends _$ProxiesAction {
             .stop(provider.updatingKey, operation);
       }
     }
+  }
+
+  Future<void> addToLocalProxies(String proxyName) async {
+    final appLocalizations = currentAppLocalizations;
+    final definition = await _core.getProxyDefinition(proxyName);
+    if (definition == null) {
+      throw MessageException(
+        appLocalizations.customIssueMissingProxies(proxyName),
+      );
+    }
+    final (proxies, groupNames) = await (
+      database.customProxiesDao.query().get(),
+      database.proxyGroupsDao.names().get(),
+    ).wait;
+    final (:name, :added) = importProxy(
+      definition,
+      existing: [for (final proxy in proxies) proxy.definition],
+      groupNames: groupNames.toSet(),
+    );
+    if (added == null) {
+      dialogs.showBanner(appLocalizations.alreadyInLocalProxies(name));
+      return;
+    }
+    final order = indexing.generateKeyBetween(
+      proxies.map((proxy) => proxy.order).nonNulls.lastOrNull,
+      null,
+    );
+    await database.customProxies.put(
+      CustomProxy.fromDefinition(added).copyWith(order: order).toCompanion(),
+    );
+    dialogs.showBanner(appLocalizations.addedToLocalProxies(name));
   }
 
   Future<void> proxyDelayTest(Proxy proxy, [String? testUrl]) {
@@ -295,7 +327,10 @@ class ProxiesAction extends _$ProxiesAction {
     ref.read(sortNumProvider.notifier).add();
   }
 
-  Future<void> delayTestPageGroup(String groupName) async {
+  Future<void> delayTestPageGroup(
+    String groupName, {
+    bool matchSearch = true,
+  }) async {
     final group = ref.read(groupsProvider).getGroup(groupName);
     if (group == null) {
       return;
@@ -305,7 +340,9 @@ class ProxiesAction extends _$ProxiesAction {
       return;
     }
     try {
-      final query = SearchQuery(ref.read(queryProvider(QueryTag.proxies)));
+      final query = SearchQuery(
+        matchSearch ? ref.read(queryProvider(QueryTag.proxies)) : '',
+      );
       await delayTest(
         group.all.whereMatches(query, (proxy) => proxy.searchFields).toList(),
         group.testUrl,
@@ -358,7 +395,10 @@ class ProxiesAction extends _$ProxiesAction {
       return;
     }
     final pending = ref.read(pendingDelayTestsProvider.notifier);
-    final job = _DelayTestJob(targets.map((target) => target.key));
+    final job = _DelayTestJob(
+      targets.map((target) => target.key),
+      Duration(milliseconds: ref.read(appSettingProvider).delayTestTimeout),
+    );
     _delayTestJobs.add(job);
     // TaskPool.run starts a task synchronously while it has an idle slot.
     job.startedOnDispatch.addAll(
@@ -394,8 +434,14 @@ class ProxiesAction extends _$ProxiesAction {
       _scheduleDelayFlush();
     }
     try {
-      final delay = await _core.getDelay(target.testUrl, target.proxyName);
-      if (delay != null && !job.cancelled) {
+      final delay = await _core.testDelay(
+        TestDelayParams(
+          proxyName: target.proxyName,
+          testUrl: target.testUrl,
+          timeout: job.timeout.inMilliseconds,
+        ),
+      );
+      if (!job.cancelled) {
         setDelay(delay);
       }
     } catch (error) {

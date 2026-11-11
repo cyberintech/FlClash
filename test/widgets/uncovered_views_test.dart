@@ -3,31 +3,35 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:fl_clash/common/l10n_labels.dart';
 import 'package:fl_clash/common/request.dart';
 import 'package:fl_clash/enum/enum.dart';
-import 'package:fl_clash/features/overwrite/overwrite.dart';
-import 'package:fl_clash/icons/icons.dart';
+import 'package:fl_clash/features/form/form.dart';
 import 'package:fl_clash/l10n/l10n.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/pages/editor.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/about.dart';
+import 'package:fl_clash/views/config/rules.dart';
 import 'package:fl_clash/views/config/scripts.dart';
-import 'package:fl_clash/views/profiles/overwrite/standard.dart';
-import 'package:fl_clash/views/proxies/setting.dart';
+import 'package:fl_clash/views/profiles/extend/standard.dart';
+import 'package:fl_clash/views/proxies/proxies.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/gestures.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../helpers/context_menu.dart';
 import '../helpers/glyph_finders.dart';
 import '../helpers/test_app.dart';
 import '../helpers/test_profiles.dart';
 import '../plugins/code_forge/support.dart';
+import '../helpers/host_scaffold.dart';
 
 class _PendingAdapter implements HttpClientAdapter {
   final response = Completer<ResponseBody>();
@@ -80,7 +84,7 @@ class _TestGlobalRules extends GlobalRules {
   Stream<List<Rule>> build() => Stream.value(initial);
 }
 
-class _TestProfileAddedRules extends ProfileAddedRules {
+class _TestProfileAddedRules extends ProfileRules {
   _TestProfileAddedRules(this.initial);
 
   final List<Rule> initial;
@@ -138,7 +142,20 @@ void main() {
     );
   });
 
-  testWidgets('proxies setting sheet renders and switches layout type', (
+  Future<void> openProxiesMenu(WidgetTester tester) async {
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byGlyph(AppGlyphs.more),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  Finder inMenu(Finder finder) =>
+      find.descendant(of: find.byType(PopupMenu), matching: finder);
+
+  testWidgets('the proxies menu picks the style from a sub menu', (
     tester,
   ) async {
     final container = _containerFor(tester);
@@ -146,44 +163,82 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const TestApp(child: Scaffold(body: ProxiesSetting())),
+        child: const TestApp(child: ProxiesView()),
       ),
     );
     await tester.pump();
+    final l10n = AppLocalizations.current;
 
-    expect(find.byType(ProxiesSetting), findsOneWidget);
-    expect(tester.takeException(), null);
+    await openProxiesMenu(tester);
+    expect(inMenu(find.text(l10n.iconStyle)), findsOneWidget);
 
-    container
-        .read(proxiesStyleSettingProvider.notifier)
-        .update((state) => state.copyWith(type: ProxiesType.list));
-    await tester.pump();
+    await tester.tap(inMenu(find.text(l10n.style)));
+    await tester.pumpAndSettle();
+    await tester.tap(inMenu(find.text(ProxiesType.tab.label)));
+    await tester.pumpAndSettle();
 
-    expect(container.read(proxiesStyleSettingProvider).type, ProxiesType.list);
+    expect(container.read(proxiesStyleSettingProvider).type, ProxiesType.tab);
+    expect(find.byType(PopupMenu), findsNothing);
+
+    await openProxiesMenu(tester);
+    expect(inMenu(find.text(l10n.iconStyle)), findsNothing);
+    expect(
+      tester.getTopLeft(inMenu(find.text(l10n.scrollToSelected))).dy,
+      lessThan(tester.getTopLeft(inMenu(find.byType(Divider)).first).dy),
+    );
+    expect(
+      tester.getTopLeft(inMenu(find.byType(Divider)).first).dy,
+      lessThan(tester.getTopLeft(inMenu(find.text(l10n.style))).dy),
+    );
     expect(tester.takeException(), null);
   });
 
-  testWidgets('proxies setting sorts by delay when selected', (tester) async {
+  testWidgets('the proxies menu sorts by delay and hides timed-out proxies', (
+    tester,
+  ) async {
     final container = _containerFor(tester);
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const TestApp(child: Scaffold(body: ProxiesSetting())),
+        child: const TestApp(child: ProxiesView()),
       ),
     );
     await tester.pump();
+    final l10n = AppLocalizations.current;
 
-    container
-        .read(proxiesStyleSettingProvider.notifier)
-        .update((state) => state.copyWith(sortType: ProxiesSortType.delay));
-    await tester.pump();
+    await openProxiesMenu(tester);
+    await tester.tap(inMenu(find.text(l10n.sort)));
+    await tester.pumpAndSettle();
+    await tester.tap(inMenu(find.text(l10n.delay)));
+    await tester.pumpAndSettle();
 
     expect(
       container.read(proxiesStyleSettingProvider).sortType,
       ProxiesSortType.delay,
     );
-    expect(tester.takeException(), null);
+
+    await openProxiesMenu(tester);
+    expect(
+      inMenu(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text(l10n.hideTimeoutProxies),
+            matching: find.byType(Row),
+          ),
+          matching: find.byGlyph(AppGlyphs.check),
+        ),
+      ),
+      findsNothing,
+    );
+    await tester.tap(inMenu(find.text(l10n.hideTimeoutProxies)));
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(proxiesStyleSettingProvider).hideTimeoutProxies,
+      isTrue,
+    );
+    expect(find.byType(PopupMenu), findsNothing);
   });
 
   testWidgets('about view renders version and link sections', (tester) async {
@@ -234,11 +289,11 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(tester.widget<LoadingBar>(find.byType(LoadingBar)).active, isFalse);
 
     await tester.tap(find.text('Check for updates'));
     await tester.pump();
-    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(tester.widget<LoadingBar>(find.byType(LoadingBar)).active, isTrue);
 
     await tester.tap(find.text('Check for updates'));
     await tester.pump(const Duration(milliseconds: 100));
@@ -257,7 +312,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
 
-    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(tester.widget<LoadingBar>(find.byType(LoadingBar)).active, isFalse);
     expect(find.text('The app is already up to date'), findsOneWidget);
     expect(tester.takeException(), null);
   });
@@ -289,10 +344,11 @@ void main() {
     expect(find.byType(ScriptsView), findsOneWidget);
     expect(find.text('Script 0'), findsOneWidget);
     expect(find.text('Script 3'), findsOneWidget);
-    expect(find.byGlyph(AppGlyphs.more), findsNWidgets(4));
+    expect(find.byGlyph(AppGlyphs.more), findsNothing);
+    expect(find.text('Local'), findsNWidgets(4));
     expect(tester.takeException(), null);
 
-    await tester.tap(find.text('Add'));
+    await tester.tap(find.byTooltip('Add'));
     await tester.pumpAndSettle();
     expect(find.text('Start from scratch'), findsOneWidget);
     expect(find.text('Import from URL'), findsOneWidget);
@@ -314,10 +370,10 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.tap(find.text('Add'));
+    await tester.tap(find.byTooltip('Add'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start from scratch'));
-    await settle(tester, 12);
+    await settle(tester, 22);
 
     await tester.enterText(
       find.descendant(
@@ -337,10 +393,14 @@ void main() {
     tester,
   ) async {
     const url = 'https://example.com/remote.js';
-    final local = Script(id: 1, label: 'Local', lastUpdateTime: DateTime(2026));
+    final local = Script(
+      id: 1,
+      label: 'Local script',
+      lastUpdateTime: DateTime(2026),
+    );
     final remote = Script(
       id: 2,
-      label: 'Remote',
+      label: 'Remote script',
       lastUpdateTime: DateTime(2026),
       url: url,
     );
@@ -362,16 +422,11 @@ void main() {
     await tester.pump();
 
     expect(find.text(url), findsNothing);
+    expect(find.byType(LastUpdateTimeText), findsNWidgets(2));
+    expect(find.text('Local'), findsOneWidget);
+    expect(find.text('Remote'), findsOneWidget);
 
-    Finder menuOf(String label) => find.descendant(
-      of: find.ancestor(
-        of: find.text(label),
-        matching: find.byType(DecorationListItem),
-      ),
-      matching: find.byGlyph(AppGlyphs.more),
-    );
-
-    await tester.tap(menuOf('Local'));
+    await rightClick(tester, find.text('Local script'));
     await tester.pumpAndSettle();
     expect(find.text('Edit'), findsOneWidget);
     expect(find.text('Delete'), findsOneWidget);
@@ -380,7 +435,7 @@ void main() {
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
 
-    await tester.tap(menuOf('Remote'));
+    await tester.longPress(find.text('Remote script'));
     await tester.pumpAndSettle();
     expect(find.text('Sync'), findsOneWidget);
     expect(find.text('URL'), findsOneWidget);
@@ -391,7 +446,7 @@ void main() {
     expect(action.updated, [remote]);
   });
 
-  testWidgets('scripts view reorders a script by long-press drag', (
+  testWidgets('scripts view reorders a script by its handle in sort mode', (
     tester,
   ) async {
     final scripts = List.generate(
@@ -416,11 +471,28 @@ void main() {
     );
     await tester.pump();
 
-    final from = tester.getCenter(find.text('Script 0'));
     final to = tester.getCenter(find.text('Script 2'));
-    final gesture = await tester.startGesture(from);
+    final pressed = await tester.startGesture(
+      tester.getCenter(find.text('Script 0')),
+    );
     await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
-    await gesture.moveTo(to + const Offset(0, 100));
+    await pressed.moveTo(to + const Offset(0, 100));
+    await tester.pump();
+    await pressed.up();
+    await tester.pumpAndSettle();
+    expect(notifier.orders, isEmpty);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Sort'));
+    await tester.pumpAndSettle();
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(SortHandle).first),
+    );
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    await gesture.moveTo(
+      Offset(tester.getCenter(find.byType(SortHandle).first).dx, to.dy + 100),
+    );
     await tester.pump();
     await gesture.up();
     await tester.pumpAndSettle();
@@ -449,7 +521,7 @@ void main() {
     expect(tester.takeException(), null);
   });
 
-  testWidgets('standard overwrite renders added rules and selection state', (
+  testWidgets('standard extension renders added rules and selection state', (
     tester,
   ) async {
     final profile = Profile.normal();
@@ -476,13 +548,16 @@ void main() {
       profiles: [profile],
       overrides: [
         currentProfileIdProvider.overrideWithBuild((_, _) => profile.id),
-        profileAddedRulesProvider.overrideWith2(
+        profileRulesProvider.overrideWith2(
           (_) => _TestProfileAddedRules(addedRules),
         ),
         globalRulesProvider.overrideWith(() => _TestGlobalRules(globalRules)),
         profileDisabledRuleIdsProvider.overrideWith2(
           (_) => _TestProfileDisabledRuleIds(const []),
         ),
+        clashConfigProvider(
+          profile.id,
+        ).overrideWithValue(const AsyncData(ClashConfig())),
       ],
     );
 
@@ -492,7 +567,7 @@ void main() {
         child: TestApp(
           child: ProfileIdProvider(
             profileId: profile.id,
-            child: const Scaffold(
+            child: const HostScaffold(
               body: CustomScrollView(slivers: [StandardContent()]),
             ),
           ),
@@ -515,7 +590,7 @@ void main() {
     expect(tester.takeException(), null);
   });
 
-  testWidgets('standard overwrite picks a MATCH-TARGET from the profile', (
+  testWidgets('standard extension picks a MATCH-TARGET from the profile', (
     tester,
   ) async {
     final profile = Profile.normal();
@@ -524,7 +599,7 @@ void main() {
       profiles: [profile],
       overrides: [
         currentProfileIdProvider.overrideWithBuild((_, _) => profile.id),
-        profileAddedRulesProvider.overrideWith2(
+        profileRulesProvider.overrideWith2(
           (_) => _TestProfileAddedRules(const []),
         ),
         globalRulesProvider.overrideWith(() => _TestGlobalRules(const [])),
@@ -550,7 +625,7 @@ void main() {
         child: TestApp(
           child: ProfileIdProvider(
             profileId: profile.id,
-            child: const Scaffold(
+            child: const HostScaffold(
               body: CustomScrollView(slivers: [StandardContent()]),
             ),
           ),
@@ -563,14 +638,61 @@ void main() {
 
     await tester.tap(find.text(l10n.matchTarget));
     await tester.pumpAndSettle();
-    expect(find.byType(OverwriteSelectionSheet<String>), findsOneWidget);
+    expect(find.byType(SelectionSheet<String>), findsOneWidget);
     expect(find.text('Proxy'), findsOneWidget);
 
     await tester.tap(find.text('HK'));
     await tester.pumpAndSettle();
-    expect(find.byType(OverwriteSelectionSheet<String>), findsNothing);
+    expect(find.byType(SelectionSheet<String>), findsNothing);
     expect(container.read(profilesProvider).first.matchTarget, 'HK');
     expect(find.text('HK'), findsOneWidget);
+    expect(tester.takeException(), null);
+  });
+
+  testWidgets('the global added rules page opens where they are added in a '
+      'sheet over itself', (tester) async {
+    final profile = Profile.normal();
+    final container = _containerFor(
+      tester,
+      profiles: [profile],
+      overrides: [
+        currentProfileIdProvider.overrideWithBuild((_, _) => profile.id),
+        profileRulesProvider.overrideWith2(
+          (_) => _TestProfileAddedRules(const []),
+        ),
+        globalRulesProvider.overrideWith(() => _TestGlobalRules(const [])),
+        profileDisabledRuleIdsProvider.overrideWith2(
+          (_) => _TestProfileDisabledRuleIds(const []),
+        ),
+        clashConfigProvider(
+          profile.id,
+        ).overrideWithValue(const AsyncData(ClashConfig())),
+      ],
+    );
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: TestApp(
+          child: ProfileIdProvider(
+            profileId: profile.id,
+            child: const HostScaffold(
+              body: CustomScrollView(slivers: [StandardContent()]),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final l10n = AppLocalizations.current;
+
+    await tester.tap(find.text(l10n.controlGlobalAddedRules));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(l10n.goToConfigureAddedRules));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AddedRulesView), findsOneWidget);
+    expect(find.text(l10n.editGlobalRules), findsOneWidget);
     expect(tester.takeException(), null);
   });
 }

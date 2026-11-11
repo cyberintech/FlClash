@@ -64,10 +64,11 @@ class BackupAction extends _$BackupAction {
   Future<String> _createArchive(String workDir) async {
     final databaseSnapshotPath = join(workDir, backupDatabaseName);
     await database.customStatement('VACUUM INTO ?', [databaseSnapshotPath]);
-    final (profileIds, scriptIds, providers) = await (
+    final (profileIds, scriptIds, providers, mitmModules) = await (
       database.profilesDao.query().map((item) => item.id).get(),
       database.scriptsDao.query().map((item) => item.id).get(),
-      database.clashProvidersDao.queryAll().get(),
+      database.clashProvidersDao.query().get(),
+      database.mitmModulesDao.query().get(),
     ).wait;
     final configMap = ref.read(configProvider).toJson();
     configMap['version'] = await preferences.getVersion();
@@ -81,6 +82,7 @@ class BackupAction extends _$BackupAction {
         profileIds: profileIds,
         scriptIds: scriptIds,
         providers: providers,
+        mitmModules: mitmModules,
       ),
     ));
     return archivePath;
@@ -99,7 +101,7 @@ class BackupAction extends _$BackupAction {
     final isOverride =
         ref.read(appSettingProvider).restoreStrategy ==
         RestoreStrategy.override;
-    final previousProviders = await database.clashProvidersDao.queryAll().get();
+    final previousProviders = await database.clashProvidersDao.query().get();
     final putBack = stagingDirPath == null
         ? null
         : await _copyStagedFiles(data, stagingDirPath);
@@ -108,10 +110,12 @@ class BackupAction extends _$BackupAction {
         data.profiles,
         data.scripts,
         data.rules,
-        data.links,
+        data.disabledRules,
         data.proxyGroups,
         clashProviders: data.clashProviders,
         customProxies: data.customProxies,
+        proxyDialers: data.proxyDialers,
+        mitmModules: data.mitmModules,
         isOverride: isOverride,
       );
     } catch (_) {
@@ -119,15 +123,33 @@ class BackupAction extends _$BackupAction {
       rethrow;
     }
     await _clearReplacedProviderCaches(previousProviders);
+    await _clearOutdatedCompiledRuleSets(data.clashProviders);
     if (config == null) {
+      await _restoreMitmModules();
       return;
     }
+    // A desktop backup carries no package lists; the apps picked here stay.
+    final accessControlProps = config.vpnProps.accessControlProps.hasPackages
+        ? config.vpnProps.accessControlProps
+        : ref.read(vpnSettingProvider).accessControlProps;
     writeConfig(
       ref,
       config.copyWith(
         davProps: config.davProps ?? ref.read(davSettingProvider),
+        vpnProps: config.vpnProps.copyWith(
+          accessControlProps: accessControlProps,
+        ),
       ),
     );
+    await _restoreMitmModules();
+  }
+
+  Future<void> _restoreMitmModules() async {
+    final action = ref.read(mitmModulesActionProvider.notifier);
+    await action.clean();
+    if (ref.mounted) {
+      unawaited(action.autoUpdate());
+    }
   }
 
   /// The files go in before the rows that name them, so the returned callback
@@ -182,6 +204,18 @@ class BackupAction extends _$BackupAction {
         continue;
       }
       await File(await provider.path).safeDelete();
+      await File(await provider.compiledPath).safeDelete();
+    }
+  }
+
+  /// A restored source outdates the mrs compiled from the one it replaced.
+  Future<void> _clearOutdatedCompiledRuleSets(
+    List<ClashProvider> restored,
+  ) async {
+    for (final provider in restored) {
+      if (!provider.isRemote) {
+        await File(await provider.compiledPath).safeDelete();
+      }
     }
   }
 }

@@ -6,15 +6,24 @@ import 'dart:ui' show Locale;
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
 import 'package:fl_clash/models/models.dart';
+import 'package:fl_clash/plugins/app.dart';
 import 'package:fl_clash/providers/core.dart';
 import 'package:flutter/services.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:wifi_ssid/wifi_ssid.dart';
 
 part 'generated/app.g.dart';
 
 @Riverpod(keepAlive: true)
 bool safeMode(Ref ref) => safeModeBuild;
+
+/// Android: su is there and granted FlClash's last request.
+@Riverpod(keepAlive: true)
+Future<bool> rootAccess(Ref ref) async {
+  if (!system.isAndroid || app == null) {
+    return false;
+  }
+  return app!.hasRootAccess();
+}
 
 @Riverpod(keepAlive: true)
 class AuthorizedTunEnable extends _$AuthorizedTunEnable
@@ -23,6 +32,13 @@ class AuthorizedTunEnable extends _$AuthorizedTunEnable
   TunAuthorizationState build() {
     return TunAuthorizationState.none;
   }
+}
+
+@Riverpod(keepAlive: true)
+class UpdateDownloadState extends _$UpdateDownloadState
+    with AutoDisposeNotifierMixin {
+  @override
+  UpdateDownload? build() => null;
 }
 
 @Riverpod(keepAlive: true)
@@ -62,6 +78,31 @@ class Requests extends _$Requests with AutoDisposeNotifierMixin {
       return;
     }
     this.value = state.append(value);
+  }
+
+  void updateTraffic(Map<String, RequestTraffic> traffic) {
+    if (!ref.mounted) {
+      return;
+    }
+    final pending = Map.of(traffic);
+    final updated = <int, TrackerInfo>{};
+    for (
+      var index = state.length - 1;
+      index >= 0 && pending.isNotEmpty;
+      index--
+    ) {
+      final request = state[index];
+      final item = pending.remove(request.id);
+      if (item != null) {
+        updated[index] = request.copyWith(
+          upload: item.upload,
+          download: item.download,
+        );
+      }
+    }
+    if (updated.isNotEmpty) {
+      value = state.replace(updated);
+    }
   }
 }
 
@@ -184,6 +225,17 @@ class RunTime extends _$RunTime with AutoDisposeNotifierMixin {
   }
 }
 
+/// What the running Android service was started with: it builds the tunnel
+/// once, so a later change waits for a restart.
+@Riverpod(keepAlive: true)
+class RunningVpnOptions extends _$RunningVpnOptions
+    with AutoDisposeNotifierMixin {
+  @override
+  VpnOptions? build() {
+    return null;
+  }
+}
+
 /// False while the window is hidden or the Android activity is in the
 /// background; work that only feeds the UI waits for it to come back.
 @Riverpod(keepAlive: true)
@@ -210,12 +262,13 @@ class SideWidth extends _$SideWidth with AutoDisposeNotifierMixin {
   }
 }
 
-/// Whether the native window currently draws a backdrop behind the content.
+/// The opacity the sidebar keeps its own color at over the backdrop the native
+/// window draws behind the content, or null while it draws none.
 @Riverpod(keepAlive: true)
 class WindowBlur extends _$WindowBlur with AutoDisposeNotifierMixin {
   @override
-  bool build() {
-    return false;
+  double? build() {
+    return null;
   }
 }
 
@@ -232,11 +285,6 @@ ViewMode viewMode(Ref ref) {
 @Riverpod(keepAlive: true)
 bool isMobileView(Ref ref) {
   return ref.watch(viewModeProvider) == ViewMode.mobile;
-}
-
-@Riverpod(keepAlive: true)
-double viewHeight(Ref ref) {
-  return ref.watch(viewSizeProvider).height;
 }
 
 @Riverpod(keepAlive: true)
@@ -536,14 +584,6 @@ class Items extends _$Items with AutoDisposeNotifierMixin {
   }
 }
 
-@riverpod
-class Item extends _$Item with AutoDisposeNotifierMixin {
-  @override
-  dynamic build(String key) {
-    return null;
-  }
-}
-
 @Riverpod(keepAlive: true)
 class UpdatingKeys extends _$UpdatingKeys {
   final _operations = <String, Set<int>>{};
@@ -618,24 +658,6 @@ class CurrentSSID extends _$CurrentSSID with AutoDisposeNotifierMixin {
   @override
   String? build() {
     return null;
-  }
-}
-
-@Riverpod(keepAlive: true)
-class BatteryOptimizationDisable extends _$BatteryOptimizationDisable
-    with AutoDisposeNotifierMixin {
-  @override
-  bool build() {
-    return false;
-  }
-}
-
-@Riverpod(keepAlive: true)
-class LocationPermissions extends _$LocationPermissions
-    with AutoDisposeNotifierMixin {
-  @override
-  WifiSsidPermission build() {
-    return WifiSsidPermission.denied;
   }
 }
 

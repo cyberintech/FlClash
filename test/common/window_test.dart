@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:fl_clash/common/constant.dart';
 import 'package:fl_clash/common/window.dart';
 import 'package:fl_clash/models/config.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 
 const _windowChannel = MethodChannel('window');
 
@@ -100,11 +100,11 @@ void main() {
       tint: tint,
     );
 
-    expect(first, isFalse);
-    expect(second, isTrue);
+    expect(first, isNull);
+    expect(second, 0.5);
     expect(
       methodCalls.where((call) => call.method == 'isEffectSupported'),
-      hasLength(Platform.isWindows ? 3 : 2),
+      hasLength(Platform.isWindows ? 4 : 3),
     );
     expect(methodCalls.last.arguments['effect'], isNot('none'));
   });
@@ -118,17 +118,17 @@ void main() {
     );
 
     if (Platform.isLinux) {
-      expect(active, isFalse);
+      expect(active, isNull);
       expect(methodCalls, isEmpty);
       return;
     }
 
-    expect(active, isTrue);
+    expect(active, 0.5);
     expect(calls.last, 'setEffect');
     expect(methodCalls.last.arguments, {
-      'effect': Platform.isWindows ? 'acrylic' : 'blur',
+      'effect': Platform.isWindows ? 'mica' : 'glass',
       'tint': Platform.isWindows
-          ? tint.withValues(alpha: kSidebarBlurOpacity).toARGB32()
+          ? tint.withValues(alpha: 0.5).toARGB32()
           : null,
       'brightness': 'dark',
     });
@@ -142,7 +142,7 @@ void main() {
       tint: tint,
     );
 
-    expect(active, isFalse);
+    expect(active, isNull);
     if (Platform.isLinux) {
       expect(methodCalls, isEmpty);
       return;
@@ -151,7 +151,7 @@ void main() {
     expect(methodCalls.last.arguments, {
       'effect': 'none',
       'tint': Platform.isWindows
-          ? tint.withValues(alpha: kSidebarBlurOpacity).toARGB32()
+          ? tint.withValues(alpha: 0.5).toARGB32()
           : null,
       'brightness': 'light',
     });
@@ -198,6 +198,101 @@ void main() {
     },
   );
 
+  group('restoredWindowPosition', () {
+    const primary = Display(
+      id: 'primary',
+      size: Size(1920, 1080),
+      visiblePosition: Offset.zero,
+      scaleFactor: 1,
+    );
+    // 2560x1440 physical at 150%, right of the primary: screen_retriever
+    // divides its origin by its own scale.
+    const secondary = Display(
+      id: 'secondary',
+      size: Size(1707, 960),
+      visiblePosition: Offset(1280, 0),
+      scaleFactor: 1.5,
+    );
+
+    test('places a window saved on a 150% monitor back on it', () {
+      const props = WindowProps(
+        width: 800,
+        height: 600,
+        left: 2200 / 1.5,
+        top: 150 / 1.5,
+        scale: 1.5,
+      );
+
+      final position = restoredWindowPosition(
+        props,
+        displays: const [primary, secondary],
+        currentScale: 1,
+      );
+
+      expect(position!.dx, closeTo(2200, 0.001));
+      expect(position.dy, closeTo(150, 0.001));
+    });
+
+    test('rejects a position no display shows any more', () {
+      const props = WindowProps(
+        width: 800,
+        height: 600,
+        left: 2200,
+        top: 100,
+        scale: 1,
+      );
+
+      expect(
+        restoredWindowPosition(
+          props,
+          displays: const [primary],
+          currentScale: 1,
+        ),
+        isNull,
+      );
+    });
+
+    test('reads a position saved without a scale at the current one', () {
+      const props = WindowProps(width: 800, height: 600, left: 100, top: 50);
+
+      expect(
+        restoredWindowPosition(
+          props,
+          displays: const [primary],
+          currentScale: 1.25,
+        ),
+        const Offset(100, 50),
+      );
+    });
+
+    test('keeps logical coordinates where the platform has them', () {
+      const props = WindowProps(
+        width: 800,
+        height: 600,
+        left: 1500,
+        top: 100,
+        scale: 2,
+      );
+
+      expect(
+        restoredWindowPosition(props, displays: const [primary, secondary]),
+        const Offset(1500, 100),
+      );
+    });
+  });
+
+  group('fittedWindowSize', () {
+    test('keeps the default window size on a large screen', () {
+      expect(fittedWindowSize(const Size(1920, 1040)), defaultWindowSize);
+    });
+
+    test('leaves a margin of a small work area', () {
+      final size = fittedWindowSize(const Size(1366, 728));
+      expect(size.width, closeTo(1366 * 0.9, 0.001));
+      expect(size.height, closeTo(728 * 0.9, 0.001));
+    });
+  });
+
   test('maximized geometry is not captured', () async {
     isMaximized = true;
 
@@ -212,5 +307,38 @@ void main() {
     isFullScreen = false;
     isMinimized = true;
     expect(await Window().captureNormalGeometry(const WindowProps()), isNull);
+  });
+
+  test('the init failure window closes and quits through onExit', () async {
+    var exits = 0;
+
+    await Window().showInitFailure(onExit: () async => exits++);
+
+    MethodCall callOf(String method) =>
+        methodCalls.firstWhere((call) => call.method == method);
+    expect(callOf('setPreventClose').arguments, {'value': true});
+    expect(
+      (callOf('setTitleBarStyle').arguments as Map)['style'],
+      'normal',
+      reason: 'the error screen draws no window header of its own',
+    );
+
+    for (final event in ['close', 'should-terminate']) {
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            _windowChannel.name,
+            _windowChannel.codec.encodeMethodCall(
+              MethodCall('onEvent', {'name': event}),
+            ),
+            null,
+          );
+    }
+    expect(
+      exits,
+      2,
+      reason:
+          'the macOS runner cancels every quit and closing its last window '
+          'leaves the process running, so both have to end in onExit',
+    );
   });
 }

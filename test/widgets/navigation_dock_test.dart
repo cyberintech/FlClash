@@ -1,23 +1,24 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:fl_clash/common/app_ports.dart';
 import 'package:fl_clash/enum/enum.dart';
-import 'package:fl_clash/icons/icons.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/pages/home.dart';
 import 'package:fl_clash/providers/providers.dart';
 import 'package:fl_clash/state.dart';
-import 'package:fl_clash/views/dashboard/widgets/start_button.dart';
+import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/views/navigation.dart';
 import 'package:fl_clash/widgets/widgets.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../helpers/test_app.dart';
+import '../helpers/host_scaffold.dart';
 
 const _mobileSize = Size(400, 800);
 
@@ -27,17 +28,16 @@ final _lens = find.descendant(
 );
 const _addLabel = 'Add';
 
-IconButtonData _addAction({bool isLoading = false}) {
+IconButtonData _addAction() {
   return IconButtonData(
     glyph: AppGlyphs.add,
     onPressed: () {},
     tooltip: _addLabel,
-    isLoading: isLoading,
   );
 }
 
 Widget _page(String title, {IconButtonData? primaryAction}) {
-  return CommonScaffold(
+  return Scaffold(
     title: title,
     primaryAction: primaryAction,
     body: Text('page:$title'),
@@ -124,19 +124,12 @@ void main() {
     addTearDown(() => navigationPort = null);
   });
 
-  testWidgets('the start button holds the end of the dock on the dashboard', (
-    tester,
-  ) async {
+  testWidgets('the dock stays centred alone on every page, the dashboard '
+      'included', (tester) async {
     final container = await _pumpHome(tester);
 
     final bar = tester.getRect(find.byType(FloatingNavigationBar));
-    final button = tester.getRect(find.byType(FloatingActionButton));
-    expect(find.byType(StartButton), findsOneWidget);
-    expect(button.width, button.height);
-    expect(button.height, bar.height);
-    expect(button.center.dy, bar.center.dy);
-    expect(button.left - bar.right, 8);
-    expect((bar.left + button.right) / 2, _mobileSize.width / 2);
+    expect(bar.center.dx, _mobileSize.width / 2);
 
     await tester.drag(
       find.byType(FloatingNavigationBar),
@@ -145,7 +138,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(container.read(currentPageLabelProvider), PageLabel.tools);
-    expect(find.byType(StartButton), findsNothing);
     final alone = tester.getRect(find.byType(FloatingNavigationBar));
     expect(alone.center.dx, _mobileSize.width / 2);
     expect(alone.width, lessThan(_mobileSize.width - 40));
@@ -194,6 +186,49 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('the lens moving repaints the dock and not the page', (
+    tester,
+  ) async {
+    await _pumpHome(tester);
+    final page = tester.renderObject<RenderRepaintBoundary>(
+      find
+          .ancestor(
+            of: find.byType(HomePage),
+            matching: find.byType(RepaintBoundary),
+          )
+          .first,
+    );
+    final bar = tester.getRect(find.byType(FloatingNavigationBar));
+    final extent = (bar.width - 8) / 3;
+    var finger = Offset(bar.left + 4 + extent / 2, bar.center.dy);
+    final gesture = await tester.startGesture(finger);
+    await tester.pump(const Duration(milliseconds: 16));
+    page.debugResetMetrics();
+    for (var i = 0; i < 10; i++) {
+      finger += Offset(extent / 10, 0);
+      await gesture.moveTo(finger);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    expect(page.debugSymmetricPaintCount + page.debugAsymmetricPaintCount, 0);
+    await gesture.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the lens stops asking for frames once its wobble cannot show', (
+    tester,
+  ) async {
+    final container = await _pumpHome(tester);
+    container.read(currentPageLabelProvider.notifier).toPage(PageLabel.tools);
+    await tester.pump();
+    var elapsed = Duration.zero;
+    while (tester.binding.hasScheduledFrame && elapsed.inSeconds < 3) {
+      await tester.pump(const Duration(milliseconds: 16));
+      elapsed += const Duration(milliseconds: 16);
+    }
+    expect(elapsed, lessThan(const Duration(milliseconds: 1200)));
+  });
+
   testWidgets('a flick carries the lens on to the next item', (tester) async {
     final container = await _pumpHome(tester);
     final bar = tester.getRect(find.byType(FloatingNavigationBar));
@@ -231,43 +266,79 @@ void main() {
     expect(tester.getRect(_lens), resting);
   });
 
-  testWidgets(
-    'the docked start button swells and follows a drag like the lens',
-    (tester) async {
-      await _pumpHome(tester);
-      final press = find.ancestor(
-        of: find.byType(FloatingActionButton),
-        matching: find.byType(ElasticPress),
-      );
-      final resting = tester.getRect(press);
-      Rect painted() => _painted(
-        tester,
-        tester.renderObject<RenderProxyBox>(press).child!,
-        resting,
-      );
+  testWidgets('a quick tap lifts the lens all the way before it drops', (
+    tester,
+  ) async {
+    await _pumpHome(tester);
+    final resting = tester.getRect(_lens);
+    final hold = await tester.startGesture(resting.center);
+    await tester.pumpAndSettle();
+    final held = tester.getRect(_lens).height - resting.height;
+    await hold.up();
+    await tester.pumpAndSettle();
 
-      final gesture = await tester.startGesture(resting.center);
-      await tester.pumpAndSettle();
-      final pressed = painted();
-      expect(tester.getRect(press), resting);
-      expect(pressed.center, resting.center);
-      expect(pressed.width, greaterThan(resting.width + 8));
-      expect(
-        pressed.width / pressed.height,
-        moreOrLessEquals(resting.width / resting.height),
-      );
+    final tap = await tester.startGesture(resting.center);
+    await tester.pump(const Duration(milliseconds: 40));
+    await tap.up();
+    var lifted = 0.0;
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      lifted = math.max(lifted, tester.getRect(_lens).height - resting.height);
+    }
+    expect(lifted, greaterThan(held * 0.97));
 
-      await gesture.moveBy(const Offset(-60, 0));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(_lens), resting);
+  });
+
+  for (final (quality, lifted) in [
+    (LiquidGlassQuality.standard, 2),
+    (LiquidGlassQuality.ultra, 3),
+  ]) {
+    testWidgets('on ${quality.name} glass the dock and a lifted lens are panes '
+        'of glass', (tester) async {
+      tester.view.physicalSize = _mobileSize;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        TestApp(
+          wrapInProviderScope: true,
+          homeBuilder: (child) => HostScaffold(
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: LiquidGlassScope(
+                enabled: true,
+                quality: quality,
+                child: child,
+              ),
+            ),
+          ),
+          child: NavigationDock(
+            destinations: const [
+              NavigationDockDestination(glyph: AppGlyphs.dashboard, label: 'a'),
+              NavigationDockDestination(glyph: AppGlyphs.tools, label: 'b'),
+            ],
+            selectedIndex: 0,
+            onSelected: (_) {},
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
-      final pulled = painted();
-      expect(pulled.center.dx, lessThan(resting.center.dx - 4));
-      expect(pulled.width / pulled.height, greaterThan(1));
+      final glass = find.byType(LiquidGlass);
+      expect(glass, findsOneWidget);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.text('b')),
+      );
+      await tester.pumpAndSettle();
+      expect(glass, findsNWidgets(lifted));
 
       await gesture.up();
       await tester.pumpAndSettle();
-      expect(painted(), resting);
-    },
-  );
+      expect(glass, findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('the bar swells under a pointer and stretches past its end', (
     tester,
@@ -341,8 +412,8 @@ void main() {
       expect(drawn, moreOrLessEquals(highlight / 2, epsilon: 0.5));
       expect(highlight, lessThan(30));
       expect(
-        tester.getCenter(positioned.first).dx,
-        moreOrLessEquals(tester.getCenter(positioned.last).dx),
+        tester.getRect(positioned.first),
+        rectMoreOrLessEquals(tester.getRect(positioned.last)),
       );
 
       await mouse.moveTo(resting.center - const Offset(80, 0));
@@ -397,93 +468,30 @@ void main() {
     expect(positioned, findsOneWidget);
   });
 
-  testWidgets('a phone page shows its primary action in its bar', (
-    tester,
-  ) async {
-    final container = await _pumpHome(tester);
-    container
-        .read(currentPageLabelProvider.notifier)
-        .toPage(PageLabel.profiles);
-    await tester.pumpAndSettle();
+  for (final floating in [true, false]) {
+    testWidgets('a phone page shows its primary action in its bar above a '
+        '${floating ? 'floating' : 'fixed'} navigation bar', (tester) async {
+      final container = await _pumpHome(tester);
+      container
+          .read(appSettingProvider.notifier)
+          .update((state) => state.copyWith(floatingNavigationBar: floating));
+      container
+          .read(currentPageLabelProvider.notifier)
+          .toPage(PageLabel.profiles);
+      await tester.pumpAndSettle();
 
-    final action = find.byWidgetPredicate(
-      (widget) =>
-          widget is AppBarActionButton && widget.data.tooltip == _addLabel,
-    );
-    expect(action, findsOneWidget);
-    expect(
-      find.ancestor(of: action, matching: find.byType(AppBar)),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: find.byType(CommonScaffold),
-        matching: find.byType(FloatingActionButton),
-      ),
-      findsNothing,
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets(
-    'the docked start button stays an icon-only circle while it runs',
-    (tester) async {
-      await _pumpHome(
-        tester,
-        settle: false,
-        overrides: [
-          runTimeProvider.overrideWithBuild(
-            (_, _) => const Duration(
-              hours: 2,
-              minutes: 13,
-              seconds: 8,
-            ).inMilliseconds,
-          ),
-        ],
+      final action = find.byWidgetPredicate(
+        (widget) =>
+            widget is AppBarActionButton && widget.data.tooltip == _addLabel,
       );
-
-      final bar = tester.getRect(find.byType(FloatingNavigationBar));
-      final button = tester.getRect(find.byType(FloatingActionButton));
-      expect(button.width, button.height);
-      expect(button.height, bar.height);
-      expect(find.text('02:13:08'), findsNothing);
-      expect(find.byType(RunTimeText), findsNothing);
+      expect(action, findsOneWidget);
+      expect(
+        find.ancestor(of: action, matching: find.byType(AppBar)),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets('a page off the dock shows its primary action as a FAB', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      TestApp(
-        wrapInProviderScope: true,
-        child: _page('page', primaryAction: _addAction()),
-      ),
-    );
-
-    final fab = find.byType(FloatingActionButton);
-    expect(fab, findsOneWidget);
-    expect(find.text(_addLabel), findsOneWidget);
-    expect(find.byType(AppBarActionButton), findsNothing);
-
-    await tester.pumpWidget(
-      TestApp(
-        wrapInProviderScope: true,
-        child: _page('page', primaryAction: _addAction(isLoading: true)),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<AnimatedScale>(
-            find.ancestor(of: fab, matching: find.byType(AnimatedScale)),
-          )
-          .scale,
-      0,
-    );
-    expect(tester.takeException(), isNull);
-  });
+    });
+  }
 
   testWidgets('four destinations keep to their width and five fill the row', (
     tester,
@@ -496,7 +504,7 @@ void main() {
     Future<Rect> pumpBar(int count) async {
       await tester.pumpWidget(
         TestApp(
-          child: Scaffold(
+          child: HostScaffold(
             body: Align(
               alignment: Alignment.bottomCenter,
               child: NavigationDock(
@@ -528,14 +536,14 @@ void main() {
   testWidgets('a long label shrinks to fit, then ellipsizes behind a tooltip', (
     tester,
   ) async {
-    tester.view.physicalSize = const Size(360, 800);
+    tester.view.physicalSize = const Size(340, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
     Future<List<Text>> pumpLabels(String label) async {
       await tester.pumpWidget(
         TestApp(
-          child: Scaffold(
+          child: HostScaffold(
             body: Align(
               alignment: Alignment.bottomCenter,
               child: NavigationDock(
@@ -580,12 +588,142 @@ void main() {
     expect(tester.widget<Tooltip>(tooltips).message, 'Configuration');
   });
 
+  testWidgets('a quick tap swells an elastic press all the way', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const TestApp(
+        child: Center(
+          child: ElasticPress(
+            child: ColoredBox(
+              color: Color(0xFF2196F3),
+              child: SizedBox.square(dimension: 40),
+            ),
+          ),
+        ),
+      ),
+    );
+    final press = find.byType(ElasticPress);
+    final resting = tester.getRect(press);
+    Rect painted() => _painted(tester, tester.renderObject(press), resting);
+
+    final gesture = await tester.startGesture(resting.center);
+    await tester.pump(const Duration(milliseconds: 40));
+    await gesture.up();
+    var swollen = resting.width;
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      swollen = math.max(swollen, painted().width);
+    }
+    expect(swollen, greaterThan(resting.width * 1.24));
+
+    await tester.pumpAndSettle();
+    expect(painted(), resting);
+  });
+
+  testWidgets('a pointer lifts a tonal button part way, with no state layer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      TestApp(
+        child: Center(
+          child: TonalButtonTheme(
+            child: ElasticPress(
+              child: IconButton(
+                tooltip: _addLabel,
+                onPressed: () {},
+                icon: const GlyphIcon(AppGlyphs.add),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final press = find.byType(ElasticPress);
+    final resting = tester.getRect(press);
+    double width() =>
+        _painted(tester, tester.renderObject(press), resting).width;
+    CardSurface surface() => tester.widget<CardSurface>(
+      find.descendant(
+        of: find.byType(IconButton),
+        matching: find.byType(CardSurface),
+      ),
+    );
+    final fill = surface().fill;
+    expect(surface().look, PressLook.none);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(resting.center);
+    await tester.pumpAndSettle();
+    final hovered = width();
+    expect(hovered, greaterThan(resting.width * 1.05));
+    expect(surface().fill, fill);
+
+    await mouse.down(resting.center);
+    await tester.pumpAndSettle();
+    expect(width(), greaterThan(hovered));
+    expect(surface().fill, fill);
+
+    await mouse.up();
+    await tester.pumpAndSettle();
+    expect(width(), moreOrLessEquals(hovered));
+
+    await mouse.moveTo(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(width(), resting.width);
+    await mouse.removePointer();
+  });
+
+  testWidgets('a pointer trembling on the edge of a tonal button keeps it '
+      'lifted', (tester) async {
+    await tester.pumpWidget(
+      TestApp(
+        child: Center(
+          child: TonalButton(
+            size: TonalButtonSize.bar,
+            glyph: AppGlyphs.sync,
+            label: _addLabel,
+            onPressed: () {},
+          ),
+        ),
+      ),
+    );
+    final press = find.byType(ElasticPress);
+    final resting = tester.getRect(press);
+    double width() =>
+        _painted(tester, tester.renderObject(press), resting).width;
+    final inside = resting.centerRight - const Offset(1, 0);
+    final outside = resting.centerRight + const Offset(1, 0);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: outside);
+    await tester.pumpAndSettle();
+    expect(width(), resting.width);
+
+    await mouse.moveTo(inside);
+    await tester.pumpAndSettle();
+    final hovered = width();
+    expect(hovered, greaterThan(resting.width));
+    for (var i = 0; i < 7; i++) {
+      await mouse.moveTo(i.isEven ? outside : inside);
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.pumpAndSettle();
+    expect(width(), moreOrLessEquals(hovered));
+
+    await mouse.moveTo(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(width(), resting.width);
+    await mouse.removePointer();
+  });
+
   testWidgets(
     'an elastic button leaves a press to the swell and keeps the icon theme',
     (tester) async {
       await tester.pumpWidget(
         TestApp(
-          child: Scaffold(
+          child: HostScaffold(
             body: IconTheme.merge(
               data: const IconThemeData(fill: 1),
               child: Row(
@@ -603,40 +741,25 @@ void main() {
                       child: const Text(_addLabel),
                     ),
                   ),
-                  ElasticButton(
-                    child: FloatingActionButton(
-                      heroTag: null,
-                      onPressed: () {},
-                      child: const GlyphIcon(AppGlyphs.copy),
-                    ),
-                  ),
                 ],
               ),
             ),
           ),
         ),
       );
-      InkWell inkOf(Type button) => tester.widget<InkWell>(
-        find.descendant(
-          of: find.byType(button),
-          matching: find.byType(InkWell),
-        ),
-      );
       for (final button in [IconButton, FilledButton]) {
-        final ink = inkOf(button);
-        expect(ink.splashFactory, NoSplash.splashFactory);
         expect(
-          ink.overlayColor!.resolve({WidgetState.pressed}),
-          Colors.transparent,
+          tester
+              .widget<CardSurface>(
+                find.descendant(
+                  of: find.byType(button),
+                  matching: find.byType(CardSurface),
+                ),
+              )
+              .look,
+          PressLook.none,
         );
       }
-      final fabInk = find.descendant(
-        of: find.byType(FloatingActionButton),
-        matching: find.byType(InkWell),
-      );
-      final fabTheme = Theme.of(tester.element(fabInk));
-      expect(fabTheme.splashFactory, NoSplash.splashFactory);
-      expect(fabTheme.highlightColor, Colors.transparent);
       expect(
         IconTheme.of(tester.element(find.byType(GlyphIcon).first)).fill,
         1,

@@ -2,18 +2,18 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:fl_clash/common/common.dart';
 import 'package:fl_clash/enum/enum.dart';
-import 'package:fl_clash/icons/icons.dart';
 import 'package:fl_clash/models/models.dart';
 import 'package:fl_clash/pages/editor.dart';
 import 'package:fl_clash/providers/action.dart';
 import 'package:fl_clash/providers/app.dart';
 import 'package:fl_clash/providers/database.dart';
 import 'package:fl_clash/state.dart';
+import 'package:fl_clash/ui/icons/icons.dart';
 import 'package:fl_clash/widgets/widgets.dart';
-import 'package:collection/collection.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ScriptsView extends ConsumerStatefulWidget {
@@ -39,6 +39,8 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
       message: TextSpan(
         text: appLocalizations.deleteTip(appLocalizations.script),
       ),
+      destructive: true,
+      confirmText: appLocalizations.delete,
     );
     if (res != true || !mounted) {
       return;
@@ -61,23 +63,16 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
         illustration: NullStatusIllustration.scripts,
         label: appLocalizations.nullTip(appLocalizations.script),
       ),
-      child: ReorderableListView.builder(
-        padding: const EdgeInsets.all(
-          16,
-        ).copyWith(top: context.contentTopPadding),
-        buildDefaultDragHandles: false,
+      child: PrismReorderableListView(
+        padding: const EdgeInsets.all(16).copyWith(
+          top: context.contentTopPadding,
+          bottom: 16 + context.bottomInset,
+        ),
         itemCount: scripts.length,
-        itemBuilder: (_, index) {
-          final script = scripts[index];
-          return ReorderableDelayedDragStartListener(
-            key: ValueKey(script.id),
-            index: index,
-            child: _buildItem(script, index, scripts.length),
-          );
-        },
+        itemBuilder: (_, index) => _buildItem(scripts, index),
         proxyDecorator: (_, index, animation) {
           return commonProxyDecorator(
-            _buildItem(scripts[index], index, scripts.length),
+            _buildItem(scripts, index),
             index,
             animation,
           );
@@ -87,31 +82,76 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
     );
   }
 
-  Widget _buildItem(Script script, int index, int length) {
-    return ItemPositionProvider(
-      position: ItemPosition.get(index, length),
-      child: DecorationListItem(
-        minVerticalPadding: 0,
-        contentPadding: const EdgeInsets.only(left: 16, right: 6),
-        title: _ScriptItemTitle(script: script),
-        trailing: _ScriptItemMenu(
-          script: script,
-          onEdit: () {
-            _handleToEditor(script);
-          },
-          onEditUrl: () {
-            _handleEditUrl(script);
-          },
-          onUpdate: () {
-            _handleUpdate(script);
-          },
-          onDelete: () {
-            _handleDelete(script);
-          },
-        ),
+  List<PopupMenuItem> _buildMenuItems(Script script) {
+    final appLocalizations = context.appLocalizations;
+    return [
+      PopupMenuItem(
+        glyph: AppGlyphs.edit,
+        label: appLocalizations.edit,
         onPressed: () {
           _handleToEditor(script);
         },
+      ),
+      if (script.url != null) ...[
+        PopupMenuItem(
+          glyph: AppGlyphs.link,
+          label: appLocalizations.url,
+          onPressed: () {
+            _handleEditUrl(script);
+          },
+        ),
+        PopupMenuItem(
+          glyph: AppGlyphs.sync,
+          label: appLocalizations.sync,
+          onPressed: () {
+            _handleUpdate(script);
+          },
+        ),
+      ],
+      PopupMenuItem(
+        danger: true,
+        glyph: AppGlyphs.delete,
+        label: appLocalizations.delete,
+        onPressed: () {
+          _handleDelete(script);
+        },
+      ),
+    ];
+  }
+
+  Widget _buildItem(List<Script> scripts, int index) {
+    final script = scripts[index];
+    return SortableItem(
+      key: ValueKey(script.id),
+      index: index,
+      child: Consumer(
+        builder: (_, ref, child) => ContextMenuRegion(
+          menuItems: ref.watch(isUpdatingProvider(script.updatingKey))
+              ? null
+              : _buildMenuItems(script),
+          child: child!,
+        ),
+        child: ItemPositionProvider(
+          position: ItemPosition.get(index, scripts.length),
+          child: DecorationListItem(
+            contentPadding: const EdgeInsets.only(left: 16),
+            title: Text(
+              script.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              script.url != null
+                  ? context.appLocalizations.remote
+                  : context.appLocalizations.local,
+              style: context.listCaptionStyle,
+            ),
+            trailing: _ScriptTrailing(script: script),
+            onPressed: () {
+              _handleToEditor(script);
+            },
+          ),
+        ),
       ),
     );
   }
@@ -165,7 +205,7 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
   Future<void> _handleEditorSave(
     BuildContext _,
     String title,
-    String content, {
+    EditorContent content, {
     Script? script,
   }) async {
     final appLocalizations = context.appLocalizations;
@@ -179,7 +219,7 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
     }
     if (_scripts.hasLabel(label, except: script)) {
       unawaited(
-        dialogs.showMessage(
+        dialogs.showAlert(
           message: TextSpan(
             text: appLocalizations.existsTip(appLocalizations.name),
           ),
@@ -189,7 +229,7 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
     }
     final newScript =
         await (script?.copyWith(label: label) ?? Script.create(label: label))
-            .save(content);
+            .save(await content.readText());
     _scriptsAction.putScript(newScript);
     if (mounted) {
       Navigator.of(context).pop();
@@ -199,17 +239,10 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
   Future<bool> _handleEditorPop(
     BuildContext _,
     String title,
-    String content,
-    String raw, {
+    EditorContent content, {
     Script? script,
   }) async {
-    final appLocalizations = context.appLocalizations;
-    if (content == raw && title == (script?.label ?? '')) {
-      return true;
-    }
-    final res = await dialogs.showMessage(
-      message: TextSpan(text: appLocalizations.saveChanges),
-    );
+    final res = await dialogs.showSaveChanges();
     if (res == null) {
       return false;
     }
@@ -222,7 +255,6 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
   }
 
   void _handleToEditor([Script? script]) {
-    late final String raw;
     unawaited(
       BaseNavigator.push(
         context,
@@ -232,16 +264,12 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
           onSave: (context, title, content) =>
               _handleEditorSave(context, title, content, script: script),
           onPop: (context, title, content) {
-            return _handleEditorPop(
-              context,
-              title,
-              content,
-              raw,
-              script: script,
-            );
+            return _handleEditorPop(context, title, content, script: script);
           },
           language: Language.javaScript,
-          load: () async => raw = (await script?.content) ?? scriptTemplate,
+          load: () async => script == null
+              ? CodeForgeDocument.fromText(scriptTemplate)
+              : openEditorFile(await script.path, ifMissing: scriptTemplate),
         ),
       ),
     );
@@ -302,32 +330,31 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
     final scriptsState = ref.watch(scriptsProvider);
     final scripts = scriptsState.value ?? [];
     final isLoading = ref.watch(loadingProvider(LoadingTag.scripts));
-    return CommonScaffold(
+    return Scaffold(
+      canSort: scripts.length > 1,
       isLoading: isLoading,
       actions: [
-        CommonPopupBox(
+        PopupAnchor(
           targetBuilder: (open) {
-            return FilledButton.tonal(
-              onPressed: () {
-                final isMobile = ref.read(isMobileViewProvider);
-                open(offset: Offset(0, isMobile ? 0 : 20));
-              },
-              child: Text(appLocalizations.add),
+            return IconButton(
+              tooltip: appLocalizations.add,
+              onPressed: open,
+              icon: const GlyphIcon(AppGlyphs.addCircle),
             );
           },
-          popupBuilder: (_) => CommonPopupMenu(
+          popupBuilder: (_) => PopupMenu(
             items: [
-              CommonPopupMenuItem(
+              PopupMenuItem(
                 glyph: AppGlyphs.compose,
                 label: appLocalizations.startFromScratch,
                 onPressed: _handleToEditor,
               ),
-              CommonPopupMenuItem(
+              PopupMenuItem(
                 glyph: AppGlyphs.cloudDownload,
                 label: appLocalizations.importUrl,
                 onPressed: _handleImportFromUrl,
               ),
-              CommonPopupMenuItem(
+              PopupMenuItem(
                 glyph: AppGlyphs.importFile,
                 label: appLocalizations.importFile,
                 onPressed: _handleImportFromFile,
@@ -342,114 +369,30 @@ class _ScriptsViewState extends ConsumerState<ScriptsView> {
   }
 }
 
-class _ScriptItemTitle extends StatelessWidget {
-  const _ScriptItemTitle({required this.script});
+class _ScriptTrailing extends ConsumerWidget {
+  const _ScriptTrailing({required this.script});
 
   final Script script;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = DefaultTextStyle.of(context).style;
-    return Align(
-      alignment: AlignmentDirectional.centerStart,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            script.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: style.copyWith(
-              fontSize: context.textTheme.bodyLarge?.fontSize,
-            ),
-          ),
-          if (script.url != null)
-            LastUpdateTimeText(
-              lastUpdateDate: script.lastUpdateTime,
-              style: style.copyWith(
-                fontSize: context.textTheme.bodySmall?.fontSize,
-                color: style.color?.opacity60,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ScriptItemMenu extends ConsumerWidget {
-  const _ScriptItemMenu({
-    required this.script,
-    required this.onEdit,
-    required this.onEditUrl,
-    required this.onUpdate,
-    required this.onDelete,
-  });
-
-  final Script script;
-  final VoidCallback onEdit;
-  final VoidCallback onEditUrl;
-  final VoidCallback onUpdate;
-  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final appLocalizations = context.appLocalizations;
     final isUpdating = ref.watch(isUpdatingProvider(script.updatingKey));
-    return SizedBox.square(
-      dimension: 40,
-      child: FadeThroughBox(
-        alignment: Alignment.center,
+    // Inset here, not in the row, so the sort handle that replaces it sits flush.
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(end: 16),
+      child: AnimatedSwitcher(
+        duration: context.motionDuration(commonDuration),
+        layoutBuilder: (current, previous) => Stack(
+          alignment: AlignmentDirectional.centerEnd,
+          children: [...previous, ?current],
+        ),
         child: isUpdating
-            ? const Padding(
-                key: ValueKey('loading'),
-                padding: EdgeInsets.all(8),
-                child: CommonCircleLoading(),
-              )
-            : CommonPopupBox(
-                key: const ValueKey('menu'),
-                popupBuilder: (_) => CommonPopupMenu(
-                  items: [
-                    CommonPopupMenuItem(
-                      glyph: AppGlyphs.edit,
-                      label: appLocalizations.edit,
-                      onPressed: onEdit,
-                    ),
-                    if (script.url != null) ...[
-                      CommonPopupMenuItem(
-                        glyph: AppGlyphs.link,
-                        label: appLocalizations.url,
-                        onPressed: onEditUrl,
-                      ),
-                      CommonPopupMenuItem(
-                        glyph: AppGlyphs.sync,
-                        label: appLocalizations.sync,
-                        onPressed: onUpdate,
-                      ),
-                    ],
-                    CommonPopupMenuItem(
-                      danger: true,
-                      glyph: AppGlyphs.delete,
-                      label: appLocalizations.delete,
-                      onPressed: onDelete,
-                    ),
-                  ],
-                ),
-                targetBuilder: (open) {
-                  return IconButton(
-                    style: IconButton.styleFrom(
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.standard,
-                    ),
-                    tooltip: appLocalizations.more,
-                    onPressed: () {
-                      open();
-                    },
-                    icon: const GlyphIcon(AppGlyphs.more),
-                  );
-                },
+            ? const ActivityIndicator(key: ValueKey('loading'), size: 24)
+            : LastUpdateTimeText(
+                key: const ValueKey('time'),
+                lastUpdateDate: script.lastUpdateTime,
+                compact: true,
+                style: context.listCaptionStyle,
               ),
       ),
     );

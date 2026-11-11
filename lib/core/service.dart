@@ -38,7 +38,7 @@ class CoreService extends CoreHandlerInterface {
     final directLauncher = DirectCoreLauncher();
 
     final lifecycle = DesktopCoreLifecycle(
-      transportFactory: () => IPCCoreTransport(address: address),
+      transportFactory: () => IpcCoreTransport(address: address),
       launcherResolver: HelperLauncherResolver(
         hasHelper: system.hasHelperService && !safeModeBuild,
         directLauncher: directLauncher,
@@ -98,12 +98,12 @@ class CoreService extends CoreHandlerInterface {
   }
 
   @override
-  Future<T?> invokeMethod<T>({
+  Future<Object?> invokeMethod({
     required CoreMethod method,
     Object? arguments,
     Duration? timeout,
   }) {
-    return _rpcClient.invoke<T>(
+    return _rpcClient.invoke(
       method: method,
       arguments: arguments,
       timeout: timeout,

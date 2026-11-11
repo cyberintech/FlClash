@@ -2,6 +2,28 @@ import 'package:fl_clash/common/input_entries.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('parseLineInput', () {
+    test('keeps the commas and quotes of a line', () {
+      final parsed = parseLineInput(
+        '^https://a\\.com/(\\d{1,3}) https://b.com/\$1 302\r\n\n'
+        'http-response ^https://a "\\"ad\\":true" x\n',
+      );
+
+      expect(parsed.entries, [
+        r'^https://a\.com/(\d{1,3}) https://b.com/$1 302',
+        r'http-response ^https://a "\"ad\":true" x',
+      ]);
+      expect(parsed.isValid, isTrue);
+    });
+
+    test('drops repeats and counts the lines already listed', () {
+      final parsed = parseLineInput('a b\na b\nc d', existing: {'c d'});
+
+      expect(parsed.entries, ['a b']);
+      expect(parsed.skippedExisting, 1);
+    });
+  });
+
   group('parseListInput', () {
     test('splits on newlines and both comma widths', () {
       final parsed = parseListInput('a, b，c\r\nd\n\n e ');
@@ -57,6 +79,80 @@ void main() {
         ),
       ]);
       expect(parsed.isValid, isFalse);
+    });
+
+    test('reports items the caller refuses with their line', () {
+      final parsed = parseListInput(
+        '1.2.3.0/24\nbad, 10.0.0.0/8',
+        isValid: (value) => value.contains('/'),
+      );
+
+      expect(parsed.entries, ['1.2.3.0/24', '10.0.0.0/8']);
+      expect(parsed.issues, [
+        const InputIssue(
+          line: 2,
+          raw: 'bad',
+          kind: InputIssueKind.invalidValue,
+        ),
+      ]);
+    });
+  });
+
+  group('parseUrlInput', () {
+    bool isHttp(String url) => url.startsWith('https://');
+
+    test('splits on lines and any whitespace, stripping YAML markup', () {
+      final parsed = parseUrlInput(
+        "https://a.com/x?q=1,2  https://b.com\r\n\n- 'https://c.com'\n",
+        isValid: isHttp,
+      );
+
+      expect(parsed.entries, [
+        'https://a.com/x?q=1,2',
+        'https://b.com',
+        'https://c.com',
+      ]);
+      expect(parsed.isValid, isTrue);
+    });
+
+    test('keeps a share link line whole', () {
+      final parsed = parseUrlInput(
+        'trojan://pass@example.com:443#Hong Kong 01\nhttps://a.com https://b.com',
+        isValid: (_) => true,
+      );
+
+      expect(parsed.entries, [
+        'trojan://pass@example.com:443#Hong Kong 01',
+        'https://a.com',
+        'https://b.com',
+      ]);
+    });
+
+    test('merges duplicates and skips existing urls', () {
+      final parsed = parseUrlInput(
+        'https://a.com\nhttps://b.com\nhttps://a.com\nhttps://c.com',
+        isValid: isHttp,
+        existing: {'https://b.com'},
+      );
+
+      expect(parsed.entries, ['https://a.com', 'https://c.com']);
+      expect(parsed.skippedExisting, 1);
+    });
+
+    test('reports invalid urls with their line', () {
+      final parsed = parseUrlInput(
+        'https://a.com\nftp://b.com https://c.com',
+        isValid: isHttp,
+      );
+
+      expect(parsed.entries, ['https://a.com', 'https://c.com']);
+      expect(parsed.issues, [
+        const InputIssue(
+          line: 2,
+          raw: 'ftp://b.com',
+          kind: InputIssueKind.invalidUrl,
+        ),
+      ]);
     });
   });
 
@@ -139,6 +235,30 @@ void main() {
 
       expect(Map.fromEntries(parsed.entries), {'a': '1', 'c': '4'});
       expect(parsed.skippedExisting, 1);
+    });
+
+    test('compares keys case-insensitively when asked', () {
+      final parsed = parseMapInput(
+        'host x\nAccept y\naccept z\nHost w',
+        existingKeys: {'Host'},
+        ignoreKeyCase: true,
+      );
+
+      expect(Map.fromEntries(parsed.entries), {'Accept': 'y'});
+      expect(parsed.skippedExisting, 1);
+    });
+
+    test('keeps key comparison case-sensitive by default', () {
+      final parsed = parseMapInput(
+        'host x\nAccept y\naccept z',
+        existingKeys: {'Host'},
+      );
+
+      expect(Map.fromEntries(parsed.entries), {
+        'host': 'x',
+        'Accept': 'y',
+        'accept': 'z',
+      });
     });
   });
 }
