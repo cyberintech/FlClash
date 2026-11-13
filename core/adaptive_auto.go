@@ -2,7 +2,6 @@ package core
 
 import (
 	"slices"
-	"strings"
 	"time"
 )
 
@@ -152,15 +151,8 @@ func (s *adaptiveState) decide(names []string, current string, now time.Time) ad
 }
 
 func adaptiveDiversity(a, b string) int {
-	parse := func(n string) (string, string, string) {
-		s := strings.Split(n, "-")
-		if len(s) < 3 {
-			return n, "", ""
-		}
-		return s[0], s[1], s[2]
-	}
-	an, ap, af := parse(a)
-	bn, bp, bf := parse(b)
+	an, ap, af, _ := adaptiveRouteParts(a)
+	bn, bp, bf, _ := adaptiveRouteParts(b)
 	score := 0
 	if an != bn {
 		score += 100
