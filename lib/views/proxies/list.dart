@@ -793,7 +793,7 @@ class _SelectedProxyName extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     return EmojiText(
-      proxyName,
+      vpnRouteDisplayName(proxyName),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: AppTextStyle.caption1.of(context, emphasized: true).toLight,

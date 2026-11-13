@@ -17,6 +17,12 @@ const _testUrl = 'https://example.com/generate_204';
 
 class _RecordingProxiesAction extends ProxiesAction {
   static final List<String> tested = [];
+  static final List<(String, String)> selected = [];
+
+  @override
+  void changeProxyDebounce(String groupName, String proxyName) {
+    selected.add((groupName, proxyName));
+  }
 
   @override
   Future<void> proxyDelayTest(Proxy proxy, [String? testUrl]) async {
@@ -31,6 +37,7 @@ void main() {
 
   setUp(() {
     _RecordingProxiesAction.tested.clear();
+    _RecordingProxiesAction.selected.clear();
     container = ProviderContainer(
       overrides: [
         profilesProvider.overrideWith(TestProfiles.new),
@@ -48,7 +55,11 @@ void main() {
 
   tearDown(() => container.dispose());
 
-  Future<void> pumpCards(WidgetTester tester, ProxyCardType type) async {
+  Future<void> pumpCards(
+    WidgetTester tester,
+    ProxyCardType type, {
+    String? firstName,
+  }) async {
     tester.view.physicalSize = const Size(900, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -64,11 +75,17 @@ void main() {
               for (var index = 0; index < 2; index++)
                 SizedBox(
                   height: 120,
+                  width: 180,
                   child: ProxyCard(
                     key: ValueKey('proxy $index'),
                     groupName: 'group',
                     testUrl: _testUrl,
-                    proxy: Proxy(name: 'proxy $index', type: 'Shadowsocks'),
+                    proxy: Proxy(
+                      name: index == 0
+                          ? firstName ?? 'proxy 0'
+                          : 'proxy $index',
+                      type: 'Shadowsocks',
+                    ),
                     groupType: GroupType.Selector,
                     type: type,
                   ),
@@ -95,6 +112,24 @@ void main() {
   }
 
   for (final type in ProxyCardType.values) {
+    testWidgets('a ${type.name} card shows the short route name but selects '
+        'and tests its original name', (tester) async {
+      await pumpCards(tester, type, firstName: 'LA-Vision-IPv4');
+
+      expect(find.text('LA-V4'), findsOneWidget);
+      expect(find.text('LA-Vision-IPv4'), findsNothing);
+      await tester.tap(find.text('LA-V4'));
+      await tester.pump();
+      expect(_RecordingProxiesAction.selected, [('group', 'LA-Vision-IPv4')]);
+
+      await focusCard(tester, 0);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(_RecordingProxiesAction.tested, ['LA-Vision-IPv4']);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('arrow right from a ${type.name} proxy card focuses its '
         'delay control', (tester) async {
       await pumpCards(tester, type);
