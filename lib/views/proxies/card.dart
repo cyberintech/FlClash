@@ -63,7 +63,7 @@ class ProxyCard extends ConsumerWidget {
       return SizedBox(
         height: measure.textHeight(AppTextStyle.subheadline) * 1,
         child: EmojiText(
-          proxy.displayName,
+          proxy.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: AppTextStyle.subheadline.of(context),
@@ -73,7 +73,7 @@ class ProxyCard extends ConsumerWidget {
       return SizedBox(
         height: measure.textHeight(AppTextStyle.subheadline) * 2,
         child: EmojiText(
-          proxy.displayName,
+          proxy.name,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: AppTextStyle.subheadline.of(context),
@@ -247,9 +247,7 @@ class _ProxyDesc extends ConsumerWidget {
           )
         : proxy.name;
     return EmojiText(
-      nodeName == proxy.name
-          ? proxy.type
-          : '${proxy.type}(${vpnRouteDisplayName(nodeName)})',
+      nodeName == proxy.name ? proxy.type : '${proxy.type}($nodeName)',
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: style,

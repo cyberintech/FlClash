@@ -235,9 +235,7 @@ abstract class Proxy with _$Proxy {
 }
 
 extension ProxyExt on Proxy {
-  String get displayName => vpnRouteDisplayName(name);
-
-  List<String> get searchFields => [name, displayName, type];
+  List<String> get searchFields => [name, type];
 }
 
 /// The `type` values `adapter.ParseProxy` accepts, in its own order.
