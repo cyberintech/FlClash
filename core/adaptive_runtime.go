@@ -63,9 +63,7 @@ func managedAdaptiveSnapshot() (C.Proxy, outboundgroup.ProxyGroup, string, []str
 	}
 	names := []string{}
 	for _, p := range group.Proxies() {
-		parts := strings.Split(p.Name(), "-")
-		if len(parts) == 3 && (parts[0] == "LON" || parts[0] == "LA" || parts[0] == "DE") &&
-			(parts[1] == "Vision" || parts[1] == "Salamander") && (parts[2] == "IPv4" || parts[2] == "IPv6") {
+		if isManagedAdaptiveRoute(p.Name()) {
 			names = append(names, p.Name())
 		}
 	}
