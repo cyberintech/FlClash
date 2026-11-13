@@ -44,6 +44,7 @@ func prepareManagedAdaptive(raw *config.RawConfig) {
 type adaptiveRuntime struct {
 	state adaptiveState
 	group C.Proxy
+	epoch uint64
 }
 
 func managedAdaptiveSnapshot() (C.Proxy, outboundgroup.ProxyGroup, string, []string) {
@@ -83,8 +84,9 @@ func (a *adaptiveRuntime) tick(ctx context.Context) {
 		selectMu.Unlock()
 		return
 	}
-	if proxy != a.group {
-		a.state, a.group = adaptiveState{}, proxy
+	epoch, _ := routeStamp()
+	if proxy != a.group || epoch != a.epoch {
+		a.state, a.group, a.epoch = adaptiveState{}, proxy, epoch
 	}
 	now := time.Now()
 	d := a.state.decide(names, current, now)
@@ -107,7 +109,8 @@ func (a *adaptiveRuntime) tick(ctx context.Context) {
 	selectMu.Lock()
 	defer selectMu.Unlock()
 	live, _, selected, _ := managedAdaptiveSnapshot()
-	if live != proxy || selected != current || !isRunning.Load() {
+	liveEpoch, _ := routeStamp()
+	if live != proxy || selected != current || liveEpoch != epoch || !isRunning.Load() {
 		return
 	}
 	selector, ok := adapterAs[outboundgroup.SelectAble](live)
