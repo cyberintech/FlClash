@@ -78,6 +78,7 @@ func pollAutoFailure(ctx context.Context) {
 	ticker := time.NewTicker(failoverPollInterval)
 	defer ticker.Stop()
 	state := failedPathState{}
+	adaptive := adaptiveRuntime{}
 	for {
 		select {
 		case <-ctx.Done():
@@ -87,6 +88,7 @@ func pollAutoFailure(ctx context.Context) {
 				state = failedPathState{}
 				continue
 			}
+			adaptive.tick(ctx)
 			configMu.Lock()
 			if ctx.Err() != nil {
 				configMu.Unlock()
@@ -132,7 +134,7 @@ func readManagedAutoPick(previous string) autoPick {
 		return autoPick{}
 	}
 	auto, ok := all["VPN-AUTO"]
-	if !ok || auto.Type() != C.Fallback {
+	if !ok || (auto.Type() != C.Fallback && auto.Type() != C.Selector) {
 		return autoPick{}
 	}
 	group, ok := auto.(*adapter.Proxy)
