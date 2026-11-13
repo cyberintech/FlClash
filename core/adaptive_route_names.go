@@ -28,13 +28,15 @@ func adaptiveRouteParts(name string) (string, string, string, bool) {
 			protocol = "XHTTP"
 		case 'A':
 			protocol = "AnyTLS"
+		case 'T':
+			protocol = "ShadowTLS"
 		default:
 			return name, "", "", false
 		}
 		return node, protocol, "IPv" + route[1:], true
 	}
 	if len(parts) == 3 && (parts[0] == "LON" || parts[0] == "LA" || parts[0] == "DE") &&
-		(parts[1] == "Vision" || parts[1] == "Salamander" || parts[1] == "XHTTP" || parts[1] == "AnyTLS") &&
+		(parts[1] == "Vision" || parts[1] == "Salamander" || parts[1] == "XHTTP" || parts[1] == "AnyTLS" || parts[1] == "ShadowTLS") &&
 		(parts[2] == "IPv4" || parts[2] == "IPv6") {
 		return parts[0], parts[1], parts[2], true
 	}
