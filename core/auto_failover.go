@@ -121,16 +121,7 @@ func pollAutoFailure(ctx context.Context) {
 // Caller holds configMu and selectMu, including around Fallback.Now().
 func readManagedAutoPick(previous string) autoPick {
 	all := tunnel.AllProxies()
-	vpn, ok := all["VPN"]
-	if !ok || vpn.Type() != C.Selector {
-		return autoPick{}
-	}
-	outer, ok := vpn.(*adapter.Proxy)
-	if !ok {
-		return autoPick{}
-	}
-	selection, ok := outer.ProxyAdapter.(interface{ Now() string })
-	if !ok || selection.Now() != "VPN-AUTO" {
+	if !managedAutoRequested() {
 		return autoPick{}
 	}
 	auto, ok := all["VPN-AUTO"]

@@ -33,6 +33,7 @@ func prepareManagedAdaptive(raw *config.RawConfig) {
 	}
 	raw.ProxyGroup[inner]["type"] = "select"
 	raw.ProxyGroup[inner]["interval"] = 0
+	raw.ProxyGroup[inner]["empty-fallback"] = "REJECT"
 	delete(raw.ProxyGroup[inner], "url")
 	for name, p := range raw.ProxyProvider {
 		if strings.HasPrefix(name, "VPN-Paths-") {
@@ -49,8 +50,7 @@ type adaptiveRuntime struct {
 
 func managedAdaptiveSnapshot() (C.Proxy, outboundgroup.ProxyGroup, string, []string) {
 	all := tunnel.AllProxies()
-	outer, ok := adapterAs[pickableGroup](all["VPN"])
-	if !ok || outer.Now() != "VPN-AUTO" {
+	if !managedAutoRequested() {
 		return nil, nil, "", nil
 	}
 	proxy := all["VPN-AUTO"]
@@ -119,4 +119,26 @@ func (a *adaptiveRuntime) tick(ctx context.Context) {
 	}
 	a.state.selected, a.state.lastSwitch = d.target, time.Now()
 	refreshRouteLocked(routeMoved)
+}
+
+func managedAutoActive(mode tunnel.TunnelMode, global, vpn string) bool {
+	switch mode {
+	case tunnel.Rule:
+		return vpn == "VPN-AUTO"
+	case tunnel.Global:
+		return global == "VPN-AUTO" || (global == "VPN" && vpn == "VPN-AUTO")
+	default:
+		return false
+	}
+}
+
+func managedAutoRequested() bool {
+	pick := func(name string) string {
+		group, ok := adapterAs[pickableGroup](lookupProxy(name))
+		if !ok {
+			return ""
+		}
+		return group.Now()
+	}
+	return managedAutoActive(tunnel.Mode(), pick("GLOBAL"), pick("VPN"))
 }
