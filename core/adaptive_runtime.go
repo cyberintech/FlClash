@@ -76,12 +76,14 @@ func managedAdaptiveSnapshot() (C.Proxy, outboundgroup.ProxyGroup, string, []str
 }
 
 func (a *adaptiveRuntime) tick(ctx context.Context) {
+	configMu.Lock()
 	selectMu.Lock()
 	proxy, _, current, names := managedAdaptiveSnapshot()
 	if proxy == nil {
 		a.state = adaptiveState{}
 		a.group = nil
 		selectMu.Unlock()
+		configMu.Unlock()
 		return
 	}
 	epoch, _ := routeStamp()
@@ -92,6 +94,7 @@ func (a *adaptiveRuntime) tick(ctx context.Context) {
 	d := a.state.decide(names, current, now)
 	probe := lookupProxy(d.probe)
 	selectMu.Unlock()
+	configMu.Unlock()
 	if probe != nil {
 		testCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		expected, _ := utils.NewUnsignedRanges[uint16]("204")
@@ -106,6 +109,8 @@ func (a *adaptiveRuntime) tick(ctx context.Context) {
 	if d.target == "" || ctx.Err() != nil {
 		return
 	}
+	configMu.Lock()
+	defer configMu.Unlock()
 	selectMu.Lock()
 	defer selectMu.Unlock()
 	live, _, selected, _ := managedAdaptiveSnapshot()
