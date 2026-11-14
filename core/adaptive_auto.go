@@ -154,13 +154,13 @@ func adaptiveDiversity(a, b string) int {
 	an, ap, af, _ := adaptiveRouteParts(a)
 	bn, bp, bf, _ := adaptiveRouteParts(b)
 	score := 0
-	if an != bn {
+	if an != "" && bn != "" && an != bn {
 		score += 100
 	}
-	if ap != bp {
+	if ap != "" && bp != "" && ap != bp {
 		score += 30
 	}
-	if af != bf {
+	if af != "" && bf != "" && af != bf {
 		score += 5
 	}
 	return score

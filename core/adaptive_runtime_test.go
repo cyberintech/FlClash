@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/metacubex/mihomo/config"
+	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/tunnel"
 )
 
@@ -51,5 +52,21 @@ func TestAdaptiveFollowsActualRuleAndGlobalSelection(t *testing.T) {
 				t.Fatalf("active=%v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestAdaptiveCandidateUsesManagedProviderAndLoadedAdapter(t *testing.T) {
+	for _, kind := range []C.AdapterType{C.Vless, C.Tuic, C.Trojan, C.AdapterType(10000)} {
+		if !managedAdaptiveCandidate("VPN-Paths-test", kind) {
+			t.Fatalf("loaded managed transport rejected: %v", kind)
+		}
+		if managedAdaptiveCandidate("other-subscription", kind) || managedAdaptiveCandidate("", kind) {
+			t.Fatalf("foreign provider admitted: %v", kind)
+		}
+	}
+	for _, kind := range []C.AdapterType{C.Direct, C.Reject, C.RejectDrop, C.Compatible, C.Pass, C.PassRule, C.Rematch, C.Dns, C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance} {
+		if managedAdaptiveCandidate("VPN-Paths-test", kind) {
+			t.Fatalf("bypass or group admitted as a VPN route: %v", kind)
+		}
 	}
 }

@@ -12,11 +12,11 @@ func adaptiveRouteParts(name string) (string, string, string, bool) {
 			node = "LON"
 		case "LA", "DE":
 		default:
-			return name, "", "", false
+			return "", "", "", false
 		}
 		route := parts[1]
 		if len(route) != 2 || (route[1] != '4' && route[1] != '6') {
-			return name, "", "", false
+			return "", "", "", false
 		}
 		var protocol string
 		switch route[0] {
@@ -33,19 +33,17 @@ func adaptiveRouteParts(name string) (string, string, string, bool) {
 		case 'Q':
 			protocol = "TUIC"
 		default:
-			return name, "", "", false
+			if route[0] < 'A' || route[0] > 'Z' {
+				return "", "", "", false
+			}
+			protocol = string(route[0])
 		}
 		return node, protocol, "IPv" + route[1:], true
 	}
 	if len(parts) == 3 && (parts[0] == "LON" || parts[0] == "LA" || parts[0] == "DE") &&
-		(parts[1] == "Vision" || parts[1] == "Salamander" || parts[1] == "XHTTP" || parts[1] == "AnyTLS" || parts[1] == "ShadowTLS" || parts[1] == "TUIC") &&
+		parts[1] != "" &&
 		(parts[2] == "IPv4" || parts[2] == "IPv6") {
 		return parts[0], parts[1], parts[2], true
 	}
-	return name, "", "", false
-}
-
-func isManagedAdaptiveRoute(name string) bool {
-	_, _, _, ok := adaptiveRouteParts(name)
-	return ok
+	return "", "", "", false
 }

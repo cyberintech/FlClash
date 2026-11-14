@@ -10,15 +10,15 @@ func TestAdaptiveManagedRouteNames(t *testing.T) {
 		for _, protocol := range []struct{ old, short string }{{"Vision", "V"}, {"Salamander", "S"}, {"XHTTP", "X"}, {"AnyTLS", "A"}, {"ShadowTLS", "T"}, {"TUIC", "Q"}} {
 			for _, family := range []int{4, 6} {
 				for _, name := range []string{fmt.Sprintf("%s-%s-IPv%d", city.old, protocol.old, family), fmt.Sprintf("%s-%s%d", city.short, protocol.short, family)} {
-					if !isManagedAdaptiveRoute(name) {
+					if _, _, _, ok := adaptiveRouteParts(name); !ok {
 						t.Fatalf("valid managed route rejected: %s", name)
 					}
 				}
 			}
 		}
 	}
-	for _, name := range []string{"", "DIRECT", "VPN-AUTO", "LA-V5", "LA-Z4", "LA-Q5", "LA-X5", "DE-A5", "LN-T5", "LN-T4-extra", "LON-ShadowTLS-via-EXP", "XX-V4", "LON-V4", "LA-Vision-via-EXP", "DE-S6-extra"} {
-		if isManagedAdaptiveRoute(name) {
+	for _, name := range []string{"", "DIRECT", "VPN-AUTO", "LA-V5", "LA-Q5", "LA-X5", "DE-A5", "LN-T5", "LN-T4-extra", "LON-ShadowTLS-via-EXP", "XX-V4", "LON-V4", "LA-Vision-via-EXP", "DE-S6-extra"} {
+		if _, _, _, ok := adaptiveRouteParts(name); ok {
 			t.Fatalf("unmanaged route accepted: %s", name)
 		}
 	}
@@ -37,5 +37,19 @@ func TestAdaptiveCompactNamesPreserveFailureDomains(t *testing.T) {
 		if got := adaptiveDiversity(tc.a, tc.b); got != tc.want {
 			t.Fatalf("diversity %s/%s=%d want%d", tc.a, tc.b, got, tc.want)
 		}
+	}
+}
+
+func TestAdaptiveFutureNamesAndUnknownDomains(t *testing.T) {
+	for _, name := range []string{"LN-W4", "DE-Z6", "LON-TrojanWS-IPv4"} {
+		if _, _, _, ok := adaptiveRouteParts(name); !ok {
+			t.Fatalf("future transport domains missing: %s", name)
+		}
+	}
+	if got := adaptiveDiversity("new display name", "LN-Q6"); got != 0 {
+		t.Fatalf("unknown domains invented independence: %d", got)
+	}
+	if got := adaptiveDiversity("LN-W4", "LA-Q6"); got != 135 {
+		t.Fatalf("future compact transport lost diversity: %d", got)
 	}
 }

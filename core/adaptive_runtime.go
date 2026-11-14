@@ -42,6 +42,18 @@ func prepareManagedAdaptive(raw *config.RawConfig) {
 	}
 }
 
+func managedAdaptiveCandidate(provider string, kind C.AdapterType) bool {
+	if !strings.HasPrefix(provider, "VPN-Paths-") {
+		return false
+	}
+	switch kind {
+	case C.Direct, C.Reject, C.RejectDrop, C.Compatible, C.Pass, C.PassRule, C.Rematch, C.Dns,
+		C.Relay, C.Selector, C.Fallback, C.URLTest, C.LoadBalance:
+		return false
+	}
+	return true
+}
+
 type adaptiveRuntime struct {
 	state adaptiveState
 	group C.Proxy
@@ -63,7 +75,7 @@ func managedAdaptiveSnapshot() (C.Proxy, outboundgroup.ProxyGroup, string, []str
 	}
 	names := []string{}
 	for _, p := range group.Proxies() {
-		if isManagedAdaptiveRoute(p.Name()) {
+		if managedAdaptiveCandidate(p.ProxyInfo().ProviderName, p.Type()) {
 			names = append(names, p.Name())
 		}
 	}
